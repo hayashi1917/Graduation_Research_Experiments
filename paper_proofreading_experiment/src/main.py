@@ -148,6 +148,7 @@ def main():
 
         print(f"\nフェーズ1完了:")
         print(f"  反復回数: {result['iterations']}")
+        print(f"  除外された項目数: {result['excluded_items_count']}")
         print(f"  停止理由: {result['stopped_reason']}")
 
     elif args.phase == 2:
