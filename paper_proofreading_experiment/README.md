@@ -60,14 +60,37 @@ paper_proofreading_experiment/
 
 ## セットアップ
 
-### 1. 依存パッケージのインストール
+### 1. 仮想環境の作成（推奨）
+
+macOSやHomebrew Python環境では、システムのPython環境を保護するため、仮想環境の使用が推奨されます。
 
 ```bash
+# プロジェクトディレクトリに移動
 cd paper_proofreading_experiment
+
+# 仮想環境を作成
+python3 -m venv venv
+
+# 仮想環境を有効化
+source venv/bin/activate
+
+# 仮想環境が有効化されると、プロンプトに (venv) が表示されます
+```
+
+**注意**: 仮想環境を使用しない場合、macOSでは以下のエラーが発生することがあります：
+```
+error: externally-managed-environment
+```
+
+### 2. 依存パッケージのインストール
+
+仮想環境を有効化した状態で、依存パッケージをインストールします：
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. APIキーの設定
+### 3. APIキーの設定
 
 環境変数としてAPIキーを設定してください：
 
@@ -83,7 +106,7 @@ GEMINI_API_KEY=your_gemini_api_key_here
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
 ```
 
-### 3. 論文ファイルの配置
+### 4. 論文ファイルの配置
 
 `data/papers/` 配下に論文IDごとのディレクトリを作成し、PDFとTeXファイルを配置してください：
 
@@ -98,13 +121,23 @@ data/papers/
 ...
 ```
 
-### 4. チェックリストの準備
+### 5. チェックリストの準備
 
 `config/checklist.md` に実験で使用するチェックリストを記載してください。
 
 サンプルが既に用意されていますが、実験では「後藤版 英語論文自己チェックリスト」など、実際のチェックリストに置き換えてください。
 
 ## 使用方法
+
+**重要**: プログラムを実行する前に、必ず仮想環境を有効化してください。
+
+```bash
+# プロジェクトディレクトリに移動
+cd paper_proofreading_experiment
+
+# 仮想環境を有効化（毎回必要）
+source venv/bin/activate
+```
 
 ### フェーズ1: クリーン化
 
@@ -272,6 +305,20 @@ experiment:
 実験で使用するチェックリストを記載してください。
 
 ## トラブルシューティング
+
+### パッケージインストールエラー（macOS）
+
+```
+error: externally-managed-environment
+```
+
+→ 仮想環境を使用してください（上記「仮想環境の作成」参照）
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
 
 ### APIキーエラー
 
