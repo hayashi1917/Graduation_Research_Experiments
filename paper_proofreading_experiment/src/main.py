@@ -17,6 +17,7 @@ from datetime import datetime
 # 自作モジュールをインポート
 from llm_client import create_llm_client
 from data_manager import DataManager
+from paper_manager import PaperManager
 from phase1_cleaner import Phase1Cleaner
 from phase2_embedder import Phase2Embedder
 from phase3_proofreader import Phase3Proofreader
@@ -106,6 +107,10 @@ def main():
     # データマネージャーを初期化
     data_manager = DataManager(results_dir)
 
+    # 論文マネージャーを初期化
+    versions_dir = base_dir / "data" / "versions"
+    paper_manager = PaperManager(paper_dir, versions_dir)
+
     # 実験開始時刻を記録
     start_time = datetime.now()
 
@@ -134,6 +139,7 @@ def main():
         cleaner = Phase1Cleaner(
             llm_client=llm_client,
             data_manager=data_manager,
+            paper_manager=paper_manager,
             prompt_template=prompts["prompt_a_and_c"]["template"],
             checklist=checklist,
             max_iterations=settings["experiment"]["max_iterations"],
@@ -203,6 +209,7 @@ def main():
         proofreader = Phase3Proofreader(
             llm_client=llm_client,
             data_manager=data_manager,
+            paper_manager=paper_manager,
             prompt_template=prompts["prompt_a_and_c"]["template"],
             checklist=checklist,
             max_iterations=settings["experiment"]["max_iterations"],

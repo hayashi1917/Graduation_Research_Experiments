@@ -231,6 +231,19 @@ class DataManager:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(response)
 
+    def save_prompt(
+        self, paper_id: str, phase: str, iteration: int, prompt: str
+    ):
+        """LLMに送信したプロンプトを保存"""
+        logs_dir = self.results_dir.parent / "logs" / paper_id
+        logs_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = f"{phase}_iteration_{iteration}_prompt.txt"
+        filepath = logs_dir / filename
+
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(prompt)
+
     def calculate_detection_rate(self, paper_id: str) -> Dict[str, Any]:
         """検出率を計算"""
         embedded_errors = self.get_embedded_errors(paper_id)

@@ -31,17 +31,28 @@ paper_proofreading_experiment/
 │   │   ├── iteration_log.csv
 │   │   ├── excluded_items.csv
 │   │   └── summary.csv
-│   └── logs/                 # LLM応答ログ
+│   ├── logs/                 # LLM応答・プロンプトログ
+│   │   └── paper001/
+│   │       ├── phase1_iteration_1_prompt.txt
+│   │       ├── phase1_iteration_1_response.txt
+│   │       ├── phase2_iteration_1_response.txt
+│   │       └── phase3_iteration_1_response.txt
+│   └── versions/             # 論文のバージョン履歴
 │       └── paper001/
-│           ├── phase1_iteration_1_response.txt
-│           ├── phase2_iteration_1_response.txt
-│           └── phase3_iteration_1_response.txt
+│           ├── phase1_iter1_20250107_120000/
+│           │   ├── paper001.pdf
+│           │   └── paper001.tex
+│           └── phase3_iter1_20250107_130000/
+│               ├── paper001.pdf
+│               └── paper001.tex
 ├── src/
 │   ├── llm_client.py         # LLM API呼び出し
+│   ├── response_parser.py    # LLM応答のパース
+│   ├── paper_manager.py      # 論文のバージョン管理・編集
+│   ├── data_manager.py       # データ記録・管理
 │   ├── phase1_cleaner.py     # フェーズ1: クリーン化
 │   ├── phase2_embedder.py    # フェーズ2: 誤り埋め込み
 │   ├── phase3_proofreader.py # フェーズ3: 校正実験
-│   ├── data_manager.py       # データ記録・管理
 │   └── main.py               # メインプログラム
 ├── requirements.txt
 └── README.md
@@ -105,16 +116,21 @@ python main.py --paper-id paper001 --phase 1
 ```
 
 **プロセス:**
-1. LLMに校正を依頼
-2. LLMの応答を確認
-3. 各指摘について判断:
-   - **[A] 適用**: 正しい指摘なので反映
+1. 各イテレーションの開始時に論文のバージョンを自動保存
+2. LLMに校正を依頼（プロンプトと応答を自動記録）
+3. LLMの応答から指摘を自動抽出・表示
+4. 各指摘について判断:
+   - **[A] 自動適用**: 正しい指摘なので自動的にTeXファイルに反映
+   - **[M] 手動**: 手動で修正
    - **[S] スキップ**: 誤検出
    - **[D] 判断困難**: 内容理解が必要（該当項目を除外）
-4. 修正を反映
+   - **[Q] 中断**: クリーン化を中断
 5. 「指摘事項はありません」が出るまで繰り返す
 
-**重要:** 判断困難として除外した項目は、フェーズ2以降でもチェック対象から除外されます。
+**重要:**
+- 判断困難として除外した項目は、フェーズ2以降でもチェック対象から除外されます
+- 各イテレーションの論文ファイルは `data/versions/` に保存されます
+- プロンプトと応答は `data/logs/` に保存されます
 
 ### フェーズ2: 誤り埋め込み
 
@@ -142,13 +158,21 @@ python main.py --paper-id paper001 --phase 3
 ```
 
 **プロセス:**
-1. LLMに校正を依頼
-2. 各指摘について判断:
-   - **[A] 適用**: 正しい指摘なので反映
+1. 各イテレーションの開始時に論文のバージョンを自動保存
+2. LLMに校正を依頼（プロンプトと応答を自動記録）
+3. LLMの応答から指摘を自動抽出・表示
+4. 各指摘について判断:
+   - **[A] 自動適用**: 正しい指摘なので自動的にTeXファイルに反映
+   - **[M] 手動**: 手動で修正
    - **[S] スキップ**: 誤検出
    - **[D] 判断困難**: 内容理解が必要（該当項目を除外）
-3. 修正を反映
-4. 「指摘事項はありません」が出るまで繰り返す（最大10回）
+   - **[Q] 中断**: 校正を中断
+5. 「指摘事項はありません」が出るまで繰り返す（最大10回）
+
+**重要:**
+- 各イテレーションの論文ファイルは `data/versions/` に保存されます
+- プロンプトと応答は `data/logs/` に保存されます
+- 検出された誤りは自動的に記録され、検出率が計算されます
 
 ## 実験データの記録
 

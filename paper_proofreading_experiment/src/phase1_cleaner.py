@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 from llm_client import LLMClient
 from data_manager import DataManager
+from response_parser import ResponseParser, ProofreadingIssue
+from paper_manager import PaperManager
 
 
 class Phase1Cleaner:
@@ -17,6 +19,7 @@ class Phase1Cleaner:
         self,
         llm_client: LLMClient,
         data_manager: DataManager,
+        paper_manager: PaperManager,
         prompt_template: str,
         checklist: str,
         max_iterations: int = 10,
@@ -25,15 +28,18 @@ class Phase1Cleaner:
         Args:
             llm_client: LLMクライアント
             data_manager: データマネージャー
+            paper_manager: 論文マネージャー
             prompt_template: プロンプトテンプレート
             checklist: チェックリスト
             max_iterations: 最大反復回数
         """
         self.llm_client = llm_client
         self.data_manager = data_manager
+        self.paper_manager = paper_manager
         self.prompt_template = prompt_template
         self.checklist = checklist
         self.max_iterations = max_iterations
+        self.parser = ResponseParser()
 
     def run(
         self,
@@ -77,6 +83,15 @@ class Phase1Cleaner:
                 checklist=self.checklist,
             )
 
+            # 論文のバージョンを保存（イテレーション開始時）
+            self.paper_manager.save_version(
+                paper_id=paper_id,
+                phase="phase1",
+                iteration=iteration,
+                tex_path=tex_path,
+                pdf_path=pdf_path,
+            )
+
             # LLMを呼び出す
             print("LLMに校正を依頼中...")
             response = self.llm_client.call(
@@ -85,7 +100,13 @@ class Phase1Cleaner:
                 tex_path=tex_path,
             )
 
-            # 応答を保存
+            # プロンプトと応答を保存
+            self.data_manager.save_prompt(
+                paper_id=paper_id,
+                phase="phase1",
+                iteration=iteration,
+                prompt=prompt,
+            )
             self.data_manager.save_response(
                 paper_id=paper_id,
                 phase="phase1",
@@ -93,9 +114,7 @@ class Phase1Cleaner:
                 response=response,
             )
 
-            print(f"\nLLMの応答:\n{'-'*40}")
-            print(response)
-            print(f"{'-'*40}\n")
+            print(f"\n✓ LLMの応答を受信しました")
 
             # 「指摘事項はありません」が含まれているか確認
             if "指摘事項はありません" in response:
@@ -115,10 +134,30 @@ class Phase1Cleaner:
                 )
                 break
 
+            # 応答をパースして指摘を抽出
+            issues = self.parser.parse_proofreading_response(response)
+
+            # 指摘が1つもない場合（パース失敗の可能性）
+            if not issues:
+                print("\n応答から指摘を抽出できませんでした。")
+                print("生のLLM応答を確認してください:")
+                print(f"\n{'-'*60}")
+                print(response)
+                print(f"{'-'*60}\n")
+
+                cont = input("次のイテレーションに進みますか？ [Y/N]: ").strip().upper()
+                if cont != "Y":
+                    stopped_reason = "parse_failed"
+                    break
+                continue
+
             # 修正点がある場合はユーザーに確認
-            print("\n修正点が検出されました。")
-            print("各指摘について判断してください:")
-            print("  [A] 適用: 正しい指摘なので反映")
+            print(f"\n修正点が検出されました: {len(issues)}件")
+            self.parser.display_issues(issues)
+
+            print("\n各指摘について判断してください:")
+            print("  [A] 適用: 正しい指摘なので反映（自動適用）")
+            print("  [M] 手動: 手動で修正")
             print("  [S] スキップ: 誤検出")
             print("  [D] 判断困難: 内容理解が必要（該当項目を除外）")
             print("  [Q] 中断: クリーン化を中断")
@@ -127,32 +166,41 @@ class Phase1Cleaner:
             detected_in_iteration = []
             new_excluded = []
 
-            while True:
-                print("\n指摘を1つずつ処理します。")
-                print("指摘番号を入力してください（例: 1）")
-                print("すべて処理した場合は 'done' と入力してください。")
+            for issue in issues:
+                print(f"\n{'='*60}")
+                print(f"【指摘 {issue.issue_number}/{len(issues)}】")
+                print(f"\n修正前: {issue.before[:100]}...")
+                print(f"根拠: {issue.reasoning[:100]}...")
+                print(f"修正後: {issue.after[:100]}...")
+                print(f"{'='*60}")
 
-                choice = input("\n選択: ").strip().lower()
-
-                if choice == "done":
-                    break
-                elif choice == "q":
-                    print("\nクリーン化を中断します。")
-                    stopped_reason = "user_abort"
-                    break
-
-                # 判断を取得
-                print("\nこの指摘について:")
-                action = input("[A]適用 / [S]スキップ / [D]判断困難: ").strip().upper()
+                action = input("\n[A]自動適用 / [M]手動 / [S]スキップ / [D]判断困難 / [Q]中断: ").strip().upper()
 
                 if action == "A":
-                    print("→ 適用として記録します。")
-                    detected_in_iteration.append(f"issue_{choice}")
+                    print("→ 自動適用します...")
 
-                    # 実際に論文を修正
-                    print("\n手動で論文を修正してください。")
-                    print("修正が完了したら Enter キーを押してください...")
-                    input()
+                    # TeXファイルに修正を適用
+                    success = self.paper_manager.apply_correction(
+                        tex_path=tex_path,
+                        before_text=issue.before,
+                        after_text=issue.after,
+                        backup=True,
+                    )
+
+                    if success:
+                        detected_in_iteration.append(f"issue_{issue.issue_number}_auto")
+                        print("✓ 修正を適用しました")
+                    else:
+                        print("⚠ 自動適用に失敗しました。手動で修正してください。")
+                        input("修正完了後、Enter キーを押してください...")
+                        detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
+
+                elif action == "M":
+                    print("→ 手動で修正してください。")
+                    print(f"\n修正前: {issue.before}")
+                    print(f"修正後: {issue.after}")
+                    input("\n修正完了後、Enter キーを押してください...")
+                    detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
 
                 elif action == "S":
                     print("→ スキップします（誤検出として記録）。")
@@ -172,8 +220,13 @@ class Phase1Cleaner:
                         paper_id=paper_id,
                         checklist_item=item,
                         reason=reason,
-                        example_case=f"phase1_iteration_{iteration}",
+                        example_case=f"phase1_iteration_{iteration}_issue{issue.issue_number}",
                     )
+
+                elif action == "Q":
+                    print("\nクリーン化を中断します。")
+                    stopped_reason = "user_abort"
+                    break
 
             # 中断判定
             if stopped_reason == "user_abort":
