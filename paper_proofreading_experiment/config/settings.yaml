@@ -1,0 +1,41 @@
+# 実験設定
+
+# LLM設定
+llm:
+  # 校正用LLM
+  proofreading:
+    provider: "gemini"
+    model: "gemini-1.5-pro"
+    temperature: 0.0
+    api_key_env: "GEMINI_API_KEY"
+
+  # 誤り埋め込み用LLM
+  embedding:
+    provider: "claude"
+    model: "claude-3-5-sonnet-20241022"
+    temperature: 0.0
+    api_key_env: "ANTHROPIC_API_KEY"
+
+# 実験パラメータ
+experiment:
+  # 埋め込む誤りの数
+  num_errors: 10
+
+  # 同一チェックリスト項目からの最大選出数
+  max_errors_per_item: 2
+
+  # フェーズ3の最大反復回数
+  max_iterations: 10
+
+  # 論文の総数
+  num_papers: 10
+
+# ディレクトリパス
+paths:
+  papers: "data/papers"
+  results: "data/results"
+  logs: "data/logs"
+  config: "config"
+
+# チェックリストファイル
+checklist_file: "config/checklist.md"
