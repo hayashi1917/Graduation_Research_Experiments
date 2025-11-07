@@ -5,7 +5,7 @@ llm:
   # 校正用LLM
   proofreading:
     provider: "gemini"
-    model: "gemini-2.0-flash-exp"
+    model: "gemini-2.5-pro"
     temperature: 0.0
     api_key_env: "GEMINI_API_KEY"
 
