@@ -20,7 +20,7 @@ import uvicorn
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from llm_client import LLMClient
+from llm_client import LLMClient, GeminiClient, ClaudeClient
 from data_manager import DataManager
 from response_parser import ResponseParser
 from paper_manager import PaperManager
@@ -294,18 +294,22 @@ async def execute_phase(paper_id: str, phase: str, websocket: WebSocket, client_
             llm_config = settings["llm"]["error_embedding"]
 
         # APIキーを環境変数から取得
-        api_key = None
-        if llm_config["provider"] == "gemini":
-            api_key = os.getenv("GEMINI_API_KEY")
-        elif llm_config["provider"] == "anthropic":
-            api_key = os.getenv("ANTHROPIC_API_KEY")
+        provider = llm_config["provider"]
+        model = llm_config["model"]
+        temperature = llm_config.get("temperature", 0.0)
 
-        llm_client = LLMClient(
-            provider=llm_config["provider"],
-            model=llm_config["model"],
-            temperature=llm_config.get("temperature", 0.0),
-            api_key=api_key,
-        )
+        if provider == "gemini":
+            api_key = os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                raise ValueError("環境変数 GEMINI_API_KEY が設定されていません")
+            llm_client = GeminiClient(model=model, api_key=api_key, temperature=temperature)
+        elif provider == "anthropic":
+            api_key = os.getenv("ANTHROPIC_API_KEY")
+            if not api_key:
+                raise ValueError("環境変数 ANTHROPIC_API_KEY が設定されていません")
+            llm_client = ClaudeClient(model=model, api_key=api_key, temperature=temperature)
+        else:
+            raise ValueError(f"未対応のプロバイダー: {provider}")
 
         # フェーズ実行
         if phase == "phase1":
