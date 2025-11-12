@@ -210,7 +210,7 @@ async def get_logs(paper_id: str, phase: Optional[str] = None):
 async def get_iterations(paper_id: str):
     """イテレーション履歴を取得"""
     try:
-        csv_path = data_dir / "iteration_log.csv"
+        csv_path = results_dir / "iteration_log.csv"
         if not csv_path.exists():
             return {"iterations": []}
 

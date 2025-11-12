@@ -278,11 +278,41 @@ function handleWebSocketMessage(data) {
  * ユーザー選択を処理
  */
 async function handleUserChoice(message, choices) {
-    // シンプルなconfirmダイアログを使用
-    const confirmed = confirm(message);
-    const choice = confirmed ? choices[0] : choices[1];
+    // モーダルにメッセージを設定
+    document.getElementById('user-choice-message').textContent = message;
 
-    // 選択をサーバーに送信
+    // モーダルを表示
+    const modal = new bootstrap.Modal(document.getElementById('userChoiceModal'));
+    modal.show();
+
+    addLogMessage(`確認待ち: ${message}`, 'warning');
+
+    // ボタンのイベントリスナーを設定（一度だけ実行）
+    const yesBtn = document.getElementById('user-choice-yes');
+    const noBtn = document.getElementById('user-choice-no');
+
+    const handleYes = () => {
+        modal.hide();
+        sendUserChoice(choices[0]);
+        yesBtn.removeEventListener('click', handleYes);
+        noBtn.removeEventListener('click', handleNo);
+    };
+
+    const handleNo = () => {
+        modal.hide();
+        sendUserChoice(choices[1]);
+        yesBtn.removeEventListener('click', handleYes);
+        noBtn.removeEventListener('click', handleNo);
+    };
+
+    yesBtn.addEventListener('click', handleYes);
+    noBtn.addEventListener('click', handleNo);
+}
+
+/**
+ * ユーザー選択をサーバーに送信
+ */
+function sendUserChoice(choice) {
     wsManager.send({
         type: 'action',
         action: choice,
