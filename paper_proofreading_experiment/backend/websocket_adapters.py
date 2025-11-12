@@ -56,10 +56,22 @@ class WebSocketPhase1Adapter:
             "level": "info"
         })
 
-        # 除外項目リストを初期化
-        excluded_items = self.data_manager.get_excluded_items(paper_id)
+        # 進捗を読み込む（前回の続きから開始）
+        saved_iteration, saved_excluded_items = self.data_manager.load_progress(paper_id, "phase1")
 
-        iteration = 0
+        if saved_iteration > 0:
+            await websocket.send_json({
+                "type": "log",
+                "message": f"前回の進捗を検出: イテレーション {saved_iteration} から再開します",
+                "level": "info"
+            })
+            iteration = saved_iteration
+            excluded_items = saved_excluded_items
+        else:
+            # 新規開始
+            iteration = 0
+            excluded_items = self.data_manager.get_excluded_items(paper_id)
+
         stopped_reason = ""
 
         while True:
@@ -177,6 +189,9 @@ class WebSocketPhase1Adapter:
                     excluded_items=excluded_items,
                     stopped_reason=stopped_reason,
                 )
+
+                # 完了したので進捗をクリア
+                self.data_manager.clear_progress(paper_id, "phase1")
                 break
 
             # 応答をパースして指摘を抽出
@@ -371,7 +386,22 @@ class WebSocketPhase1Adapter:
 
             if continue_choice != "Y":
                 stopped_reason = "user_stop"
+                # 中断時は進捗を保存（次回このイテレーションから再開）
+                self.data_manager.save_progress(
+                    paper_id=paper_id,
+                    phase="phase1",
+                    iteration=iteration,
+                    excluded_items=excluded_items,
+                )
                 break
+
+            # 次のイテレーションに進む場合も進捗を保存
+            self.data_manager.save_progress(
+                paper_id=paper_id,
+                phase="phase1",
+                iteration=iteration,
+                excluded_items=excluded_items,
+            )
 
         await websocket.send_json({
             "type": "log",
@@ -492,8 +522,22 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
     ) -> Dict[str, Any]:
         """内部実装（phase1とphase3で共通）"""
 
-        excluded_items = self.data_manager.get_excluded_items(paper_id)
-        iteration = 0
+        # 進捗を読み込む（前回の続きから開始）
+        saved_iteration, saved_excluded_items = self.data_manager.load_progress(paper_id, phase)
+
+        if saved_iteration > 0:
+            await websocket.send_json({
+                "type": "log",
+                "message": f"前回の進捗を検出: イテレーション {saved_iteration} から再開します",
+                "level": "info"
+            })
+            iteration = saved_iteration
+            excluded_items = saved_excluded_items
+        else:
+            # 新規開始
+            iteration = 0
+            excluded_items = self.data_manager.get_excluded_items(paper_id)
+
         stopped_reason = ""
 
         while True:
@@ -605,6 +649,9 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                     excluded_items=excluded_items,
                     stopped_reason=stopped_reason,
                 )
+
+                # 完了したので進捗をクリア
+                self.data_manager.clear_progress(paper_id, phase)
                 break
 
             issues = self.parser.parse_proofreading_response(response)
@@ -781,7 +828,22 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
             if continue_choice != "Y":
                 stopped_reason = "user_stop"
+                # 中断時は進捗を保存（次回このイテレーションから再開）
+                self.data_manager.save_progress(
+                    paper_id=paper_id,
+                    phase=phase,
+                    iteration=iteration,
+                    excluded_items=excluded_items,
+                )
                 break
+
+            # 次のイテレーションに進む場合も進捗を保存
+            self.data_manager.save_progress(
+                paper_id=paper_id,
+                phase=phase,
+                iteration=iteration,
+                excluded_items=excluded_items,
+            )
 
         return {
             "iterations": iteration,

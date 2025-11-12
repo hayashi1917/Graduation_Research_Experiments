@@ -7,7 +7,7 @@ import csv
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 
 class DataManager:
@@ -30,6 +30,9 @@ class DataManager:
         self.parse_failures_csv = self.results_dir / "parse_failures.csv"
         self.llm_calls_csv = self.results_dir / "llm_calls.csv"
         self.user_actions_csv = self.results_dir / "user_actions.csv"
+
+        # 進捗ファイルのパス
+        self.progress_file = self.results_dir / "progress.json"
 
         # CSVファイルを初期化
         self._initialize_csv_files()
@@ -437,6 +440,81 @@ class DataManager:
             "total_detected": total_detected,
             "detection_rate": detection_rate,
         }
+
+    def save_progress(
+        self,
+        paper_id: str,
+        phase: str,
+        iteration: int,
+        excluded_items: List[str],
+    ):
+        """進捗情報を保存"""
+        # 既存の進捗データを読み込む
+        progress_data = {}
+        if self.progress_file.exists():
+            with open(self.progress_file, "r", encoding="utf-8") as f:
+                progress_data = json.load(f)
+
+        # 論文IDのエントリがなければ作成
+        if paper_id not in progress_data:
+            progress_data[paper_id] = {}
+
+        # 進捗情報を更新
+        progress_data[paper_id][phase] = {
+            "iteration": iteration,
+            "excluded_items": excluded_items,
+            "last_updated": datetime.now().isoformat(),
+        }
+
+        # ファイルに保存
+        with open(self.progress_file, "w", encoding="utf-8") as f:
+            json.dump(progress_data, f, ensure_ascii=False, indent=2)
+
+    def load_progress(
+        self,
+        paper_id: str,
+        phase: str,
+    ) -> Tuple[int, List[str]]:
+        """進捗情報を読み込む
+
+        Returns:
+            (iteration, excluded_items): 次に開始すべきイテレーション番号と除外項目リスト
+                                        進捗がない場合は (0, [])
+        """
+        if not self.progress_file.exists():
+            return (0, [])
+
+        with open(self.progress_file, "r", encoding="utf-8") as f:
+            progress_data = json.load(f)
+
+        # 進捗情報を取得
+        if paper_id in progress_data and phase in progress_data[paper_id]:
+            saved_progress = progress_data[paper_id][phase]
+            iteration = saved_progress.get("iteration", 0)
+            excluded_items = saved_progress.get("excluded_items", [])
+            return (iteration, excluded_items)
+
+        return (0, [])
+
+    def clear_progress(self, paper_id: str, phase: str):
+        """進捗情報をクリア（フェーズ完了時）"""
+        if not self.progress_file.exists():
+            return
+
+        with open(self.progress_file, "r", encoding="utf-8") as f:
+            progress_data = json.load(f)
+
+        # 該当のフェーズ進捗を削除
+        if paper_id in progress_data and phase in progress_data[paper_id]:
+            del progress_data[paper_id][phase]
+
+            # 論文の全フェーズが完了している場合、論文エントリも削除
+            if not progress_data[paper_id]:
+                del progress_data[paper_id]
+
+        # ファイルに保存
+        with open(self.progress_file, "w", encoding="utf-8") as f:
+            json.dump(progress_data, f, ensure_ascii=False, indent=2)
 
 
 if __name__ == "__main__":
