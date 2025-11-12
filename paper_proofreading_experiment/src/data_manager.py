@@ -34,6 +34,9 @@ class DataManager:
         # 進捗ファイルのパス
         self.progress_file = self.results_dir / "progress.json"
 
+        # セッションメタデータファイルのパス
+        self.sessions_file = self.results_dir / "sessions.json"
+
         # CSVファイルを初期化
         self._initialize_csv_files()
 
@@ -45,6 +48,7 @@ class DataManager:
             with open(self.embedded_errors_csv, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
+                    "session_id",
                     "paper_id",
                     "error_id",
                     "checklist_item",
@@ -60,6 +64,7 @@ class DataManager:
             with open(self.iteration_log_csv, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
+                    "session_id",
                     "paper_id",
                     "phase",
                     "iteration",
@@ -76,6 +81,7 @@ class DataManager:
             with open(self.excluded_items_csv, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
+                    "session_id",
                     "paper_id",
                     "checklist_item",
                     "reason",
@@ -88,6 +94,7 @@ class DataManager:
             with open(self.summary_csv, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
+                    "session_id",
                     "paper_id",
                     "total_embedded",
                     "total_detected",
@@ -103,6 +110,7 @@ class DataManager:
             with open(self.detected_issues_csv, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
+                    "session_id",
                     "paper_id",
                     "phase",
                     "iteration",
@@ -120,6 +128,7 @@ class DataManager:
             with open(self.parse_failures_csv, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
+                    "session_id",
                     "paper_id",
                     "phase",
                     "iteration",
@@ -133,6 +142,7 @@ class DataManager:
             with open(self.llm_calls_csv, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
+                    "session_id",
                     "paper_id",
                     "phase",
                     "iteration",
@@ -150,6 +160,7 @@ class DataManager:
             with open(self.user_actions_csv, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow([
+                    "session_id",
                     "paper_id",
                     "phase",
                     "iteration",
@@ -161,6 +172,7 @@ class DataManager:
 
     def record_embedded_error(
         self,
+        session_id: str,
         paper_id: str,
         error_id: int,
         checklist_item: str,
@@ -175,6 +187,7 @@ class DataManager:
         with open(self.embedded_errors_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
+                session_id,
                 paper_id,
                 error_id,
                 checklist_item,
@@ -187,6 +200,7 @@ class DataManager:
 
     def record_iteration(
         self,
+        session_id: str,
         paper_id: str,
         phase: str,
         iteration: int,
@@ -202,6 +216,7 @@ class DataManager:
         with open(self.iteration_log_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
+                session_id,
                 paper_id,
                 phase,
                 iteration,
@@ -215,6 +230,7 @@ class DataManager:
 
     def record_excluded_item(
         self,
+        session_id: str,
         paper_id: str,
         checklist_item: str,
         reason: str,
@@ -226,6 +242,7 @@ class DataManager:
         with open(self.excluded_items_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
+                session_id,
                 paper_id,
                 checklist_item,
                 reason,
@@ -235,6 +252,7 @@ class DataManager:
 
     def record_detected_issue(
         self,
+        session_id: str,
         paper_id: str,
         phase: str,
         iteration: int,
@@ -251,6 +269,7 @@ class DataManager:
         with open(self.detected_issues_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
+                session_id,
                 paper_id,
                 phase,
                 iteration,
@@ -265,6 +284,7 @@ class DataManager:
 
     def record_parse_failure(
         self,
+        session_id: str,
         paper_id: str,
         phase: str,
         iteration: int,
@@ -280,6 +300,7 @@ class DataManager:
         with open(self.parse_failures_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
+                session_id,
                 paper_id,
                 phase,
                 iteration,
@@ -290,6 +311,7 @@ class DataManager:
 
     def record_llm_call(
         self,
+        session_id: str,
         paper_id: str,
         phase: str,
         iteration: int,
@@ -306,6 +328,7 @@ class DataManager:
         with open(self.llm_calls_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
+                session_id,
                 paper_id,
                 phase,
                 iteration,
@@ -320,6 +343,7 @@ class DataManager:
 
     def record_user_action(
         self,
+        session_id: str,
         paper_id: str,
         phase: str,
         iteration: int,
@@ -333,6 +357,7 @@ class DataManager:
         with open(self.user_actions_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
+                session_id,
                 paper_id,
                 phase,
                 iteration,
@@ -344,6 +369,7 @@ class DataManager:
 
     def record_summary(
         self,
+        session_id: str,
         paper_id: str,
         total_embedded: int,
         total_detected: int,
@@ -357,6 +383,7 @@ class DataManager:
         with open(self.summary_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
+                session_id,
                 paper_id,
                 total_embedded,
                 total_detected,
@@ -380,20 +407,6 @@ class DataManager:
                     errors.append(row)
 
         return errors
-
-    def get_excluded_items(self, paper_id: str) -> List[str]:
-        """指定された論文の除外項目リストを取得"""
-        excluded = []
-        if not self.excluded_items_csv.exists():
-            return excluded
-
-        with open(self.excluded_items_csv, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row["paper_id"] == paper_id:
-                    excluded.append(row["checklist_item"])
-
-        return excluded
 
     def save_response(
         self, paper_id: str, phase: str, iteration: int, response: str
@@ -445,6 +458,7 @@ class DataManager:
         self,
         paper_id: str,
         phase: str,
+        session_id: str,
         iteration: int,
         excluded_items: List[str],
     ):
@@ -461,6 +475,7 @@ class DataManager:
 
         # 進捗情報を更新
         progress_data[paper_id][phase] = {
+            "session_id": session_id,
             "iteration": iteration,
             "excluded_items": excluded_items,
             "last_updated": datetime.now().isoformat(),
@@ -474,15 +489,15 @@ class DataManager:
         self,
         paper_id: str,
         phase: str,
-    ) -> Tuple[int, List[str]]:
+    ) -> Tuple[str, int, List[str]]:
         """進捗情報を読み込む
 
         Returns:
-            (iteration, excluded_items): 次に開始すべきイテレーション番号と除外項目リスト
-                                        進捗がない場合は (0, [])
+            (session_id, iteration, excluded_items): セッションID、次に開始すべきイテレーション番号と除外項目リスト
+                                                    進捗がない場合は ("", 0, [])
         """
         if not self.progress_file.exists():
-            return (0, [])
+            return ("", 0, [])
 
         with open(self.progress_file, "r", encoding="utf-8") as f:
             progress_data = json.load(f)
@@ -490,11 +505,12 @@ class DataManager:
         # 進捗情報を取得
         if paper_id in progress_data and phase in progress_data[paper_id]:
             saved_progress = progress_data[paper_id][phase]
+            session_id = saved_progress.get("session_id", "")
             iteration = saved_progress.get("iteration", 0)
             excluded_items = saved_progress.get("excluded_items", [])
-            return (iteration, excluded_items)
+            return (session_id, iteration, excluded_items)
 
-        return (0, [])
+        return ("", 0, [])
 
     def clear_progress(self, paper_id: str, phase: str):
         """進捗情報をクリア（フェーズ完了時）"""
@@ -515,6 +531,76 @@ class DataManager:
         # ファイルに保存
         with open(self.progress_file, "w", encoding="utf-8") as f:
             json.dump(progress_data, f, ensure_ascii=False, indent=2)
+
+    def generate_session_id(self) -> str:
+        """新しいセッションIDを生成"""
+        return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    def save_session_metadata(
+        self,
+        session_id: str,
+        paper_id: str,
+        phase1_start: str,
+        phase1_end: str = "",
+        phase2_end: str = "",
+        phase3_end: str = "",
+    ):
+        """セッションメタデータを保存"""
+        sessions_data = {}
+        if self.sessions_file.exists():
+            with open(self.sessions_file, "r", encoding="utf-8") as f:
+                sessions_data = json.load(f)
+
+        if session_id not in sessions_data:
+            sessions_data[session_id] = {}
+
+        sessions_data[session_id][paper_id] = {
+            "phase1_start": phase1_start,
+            "phase1_end": phase1_end,
+            "phase2_end": phase2_end,
+            "phase3_end": phase3_end,
+        }
+
+        with open(self.sessions_file, "w", encoding="utf-8") as f:
+            json.dump(sessions_data, f, ensure_ascii=False, indent=2)
+
+    def get_excluded_items(self, paper_id: str, session_id: str = "") -> List[str]:
+        """指定された論文（およびセッション）の除外項目リストを取得
+
+        Args:
+            paper_id: 論文ID
+            session_id: セッションID（指定しない場合は最新の除外項目を取得）
+        """
+        excluded = []
+        if not self.excluded_items_csv.exists():
+            return excluded
+
+        with open(self.excluded_items_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row["paper_id"] == paper_id:
+                    # session_idが指定されていない、または一致する場合に追加
+                    if not session_id or row.get("session_id", "") == session_id:
+                        excluded.append(row["checklist_item"])
+
+        return excluded
+
+    def get_latest_session_id(self, paper_id: str) -> str:
+        """指定された論文の最新セッションIDを取得"""
+        if not self.sessions_file.exists():
+            return ""
+
+        with open(self.sessions_file, "r", encoding="utf-8") as f:
+            sessions_data = json.load(f)
+
+        # 最新のセッションIDを見つける
+        latest_session_id = ""
+        for session_id, papers in sessions_data.items():
+            if paper_id in papers:
+                if session_id > latest_session_id:  # タイムスタンプ順
+                    latest_session_id = session_id
+
+        return latest_session_id
 
 
 if __name__ == "__main__":
