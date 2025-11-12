@@ -360,16 +360,8 @@ class WebSocketPhase1Adapter:
         self.action_event = asyncio.Event()
         self.user_action = None
 
-        # タイムアウト付きで待機（60秒）
-        try:
-            await asyncio.wait_for(self.action_event.wait(), timeout=60.0)
-        except asyncio.TimeoutError:
-            await websocket.send_json({
-                "type": "log",
-                "message": "タイムアウト - スキップします",
-                "level": "warning"
-            })
-            return "S"
+        # ユーザーのアクションを待機（タイムアウトなし）
+        await self.action_event.wait()
 
         return self.user_action
 
@@ -390,10 +382,8 @@ class WebSocketPhase1Adapter:
         self.action_event = asyncio.Event()
         self.user_action = None
 
-        try:
-            await asyncio.wait_for(self.action_event.wait(), timeout=30.0)
-        except asyncio.TimeoutError:
-            return choices[0]  # デフォルト選択
+        # ユーザーの選択を待機（タイムアウトなし）
+        await self.action_event.wait()
 
         return self.user_action
 
