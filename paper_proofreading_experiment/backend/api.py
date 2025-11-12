@@ -82,12 +82,22 @@ papers_dir = Path(__file__).parent.parent / "papers"
 papers_dir.mkdir(parents=True, exist_ok=True)
 data_dir.mkdir(parents=True, exist_ok=True)
 
+# 結果とバージョンディレクトリ
+results_dir = data_dir / "results"
+versions_dir = data_dir / "versions"
+logs_dir = data_dir / "logs"
+
+results_dir.mkdir(parents=True, exist_ok=True)
+versions_dir.mkdir(parents=True, exist_ok=True)
+logs_dir.mkdir(parents=True, exist_ok=True)
+
 settings = yaml.safe_load((config_dir / "settings.yaml").read_text(encoding="utf-8"))
 prompts = yaml.safe_load((config_dir / "prompts.yaml").read_text(encoding="utf-8"))
 checklist = (config_dir / "checklist.md").read_text(encoding="utf-8")
 
-data_manager = DataManager(data_dir=data_dir)
-paper_manager = PaperManager(data_dir=data_dir)
+# 正しい引数でマネージャーを初期化
+data_manager = DataManager(results_dir=results_dir)
+paper_manager = PaperManager(paper_dir=papers_dir, versions_dir=versions_dir)
 
 
 @app.get("/")
