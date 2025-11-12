@@ -5,6 +5,7 @@ WebSocket対応のPhaseアダプタークラス
 
 import asyncio
 import sys
+import time
 from pathlib import Path
 from typing import Dict, Any, Optional
 from fastapi import WebSocket
@@ -104,11 +105,40 @@ class WebSocketPhase1Adapter:
                 "level": "info"
             })
 
-            response = self.llm_client.call(
-                prompt=prompt,
-                pdf_path=pdf_path,
-                tex_path=tex_path,
-            )
+            # LLM呼び出しの時間を計測
+            start_time = time.time()
+            llm_success = True
+            response = ""
+
+            try:
+                response = self.llm_client.call(
+                    prompt=prompt,
+                    pdf_path=pdf_path,
+                    tex_path=tex_path,
+                )
+            except Exception as e:
+                llm_success = False
+                response = f"Error: {str(e)}"
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"LLM呼び出しエラー: {str(e)}",
+                })
+                raise
+            finally:
+                duration = time.time() - start_time
+
+                # LLM呼び出しを記録
+                self.data_manager.record_llm_call(
+                    paper_id=paper_id,
+                    phase="phase1",
+                    iteration=iteration,
+                    model=self.llm_client.model,
+                    provider=getattr(self.llm_client, 'provider', 'unknown'),
+                    prompt_length=len(prompt),
+                    response_length=len(response),
+                    duration_seconds=duration,
+                    success=llm_success,
+                )
 
             # プロンプトと応答を保存
             self.data_manager.save_prompt(
@@ -168,11 +198,30 @@ class WebSocketPhase1Adapter:
                     "level": "info"
                 })
 
+                # パース失敗を記録
+                self.data_manager.record_parse_failure(
+                    paper_id=paper_id,
+                    phase="phase1",
+                    iteration=iteration,
+                    raw_response=response,
+                    error_message="指摘の抽出に失敗しました",
+                )
+
                 # 次のイテレーションに進むか確認
                 continue_choice = await self.wait_for_user_choice(
                     websocket,
                     "次のイテレーションに進みますか？",
                     ["Y", "N"]
+                )
+
+                # ユーザー選択を記録
+                self.data_manager.record_user_action(
+                    paper_id=paper_id,
+                    phase="phase1",
+                    iteration=iteration,
+                    action_type="continue_after_parse_failure",
+                    action_value=continue_choice,
+                    context="パース失敗後の継続確認",
                 )
 
                 if continue_choice != "Y":
@@ -197,6 +246,29 @@ class WebSocketPhase1Adapter:
                     websocket,
                     issue,
                     len(issues)
+                )
+
+                # 検出された指摘とユーザーアクションを記録
+                self.data_manager.record_detected_issue(
+                    paper_id=paper_id,
+                    phase="phase1",
+                    iteration=iteration,
+                    issue_number=issue.issue_number,
+                    total_issues=len(issues),
+                    before=issue.before,
+                    reasoning=issue.reasoning,
+                    after=issue.after,
+                    user_action=action,
+                )
+
+                # ユーザーアクションを記録
+                self.data_manager.record_user_action(
+                    paper_id=paper_id,
+                    phase="phase1",
+                    iteration=iteration,
+                    action_type="issue_judgment",
+                    action_value=action,
+                    context=f"issue_{issue.issue_number}/{len(issues)}",
                 )
 
                 if action == "A":
@@ -287,6 +359,16 @@ class WebSocketPhase1Adapter:
                 websocket,
                 "次のイテレーションに進みますか？",
                 ["Y", "N"]
+            )
+
+            # ユーザー選択を記録
+            self.data_manager.record_user_action(
+                paper_id=paper_id,
+                phase="phase1",
+                iteration=iteration,
+                action_type="continue_to_next_iteration",
+                action_value=continue_choice,
+                context="イテレーション後の継続確認",
             )
 
             if continue_choice != "Y":
@@ -462,11 +544,40 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                 "level": "info"
             })
 
-            response = self.llm_client.call(
-                prompt=prompt,
-                pdf_path=pdf_path,
-                tex_path=tex_path,
-            )
+            # LLM呼び出しの時間を計測
+            start_time = time.time()
+            llm_success = True
+            response = ""
+
+            try:
+                response = self.llm_client.call(
+                    prompt=prompt,
+                    pdf_path=pdf_path,
+                    tex_path=tex_path,
+                )
+            except Exception as e:
+                llm_success = False
+                response = f"Error: {str(e)}"
+                await websocket.send_json({
+                    "type": "error",
+                    "message": f"LLM呼び出しエラー: {str(e)}",
+                })
+                raise
+            finally:
+                duration = time.time() - start_time
+
+                # LLM呼び出しを記録
+                self.data_manager.record_llm_call(
+                    paper_id=paper_id,
+                    phase=phase,
+                    iteration=iteration,
+                    model=self.llm_client.model,
+                    provider=getattr(self.llm_client, 'provider', 'unknown'),
+                    prompt_length=len(prompt),
+                    response_length=len(response),
+                    duration_seconds=duration,
+                    success=llm_success,
+                )
 
             self.data_manager.save_prompt(
                 paper_id=paper_id,
@@ -516,10 +627,29 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                     "level": "warning"
                 })
 
+                # パース失敗を記録
+                self.data_manager.record_parse_failure(
+                    paper_id=paper_id,
+                    phase=phase,
+                    iteration=iteration,
+                    raw_response=response,
+                    error_message="指摘の抽出に失敗しました",
+                )
+
                 continue_choice = await self.wait_for_user_choice(
                     websocket,
                     "次のイテレーションに進みますか？",
                     ["Y", "N"]
+                )
+
+                # ユーザー選択を記録
+                self.data_manager.record_user_action(
+                    paper_id=paper_id,
+                    phase=phase,
+                    iteration=iteration,
+                    action_type="continue_after_parse_failure",
+                    action_value=continue_choice,
+                    context="パース失敗後の継続確認",
                 )
 
                 if continue_choice != "Y":
@@ -541,6 +671,29 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                     websocket,
                     issue,
                     len(issues)
+                )
+
+                # 検出された指摘とユーザーアクションを記録
+                self.data_manager.record_detected_issue(
+                    paper_id=paper_id,
+                    phase=phase,
+                    iteration=iteration,
+                    issue_number=issue.issue_number,
+                    total_issues=len(issues),
+                    before=issue.before,
+                    reasoning=issue.reasoning,
+                    after=issue.after,
+                    user_action=action,
+                )
+
+                # ユーザーアクションを記録
+                self.data_manager.record_user_action(
+                    paper_id=paper_id,
+                    phase=phase,
+                    iteration=iteration,
+                    action_type="issue_judgment",
+                    action_value=action,
+                    context=f"issue_{issue.issue_number}/{len(issues)}",
                 )
 
                 if action == "A":
@@ -625,6 +778,16 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                 websocket,
                 "次のイテレーションに進みますか？",
                 ["Y", "N"]
+            )
+
+            # ユーザー選択を記録
+            self.data_manager.record_user_action(
+                paper_id=paper_id,
+                phase=phase,
+                iteration=iteration,
+                action_type="continue_to_next_iteration",
+                action_value=continue_choice,
+                context="イテレーション後の継続確認",
             )
 
             if continue_choice != "Y":

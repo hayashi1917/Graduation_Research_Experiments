@@ -26,6 +26,10 @@ class DataManager:
         self.iteration_log_csv = self.results_dir / "iteration_log.csv"
         self.excluded_items_csv = self.results_dir / "excluded_items.csv"
         self.summary_csv = self.results_dir / "summary.csv"
+        self.detected_issues_csv = self.results_dir / "detected_issues.csv"
+        self.parse_failures_csv = self.results_dir / "parse_failures.csv"
+        self.llm_calls_csv = self.results_dir / "llm_calls.csv"
+        self.user_actions_csv = self.results_dir / "user_actions.csv"
 
         # CSVファイルを初期化
         self._initialize_csv_files()
@@ -89,6 +93,67 @@ class DataManager:
                     "phase3_iterations",
                     "excluded_items_count",
                     "completion_time",
+                ])
+
+        # detected_issues.csv
+        if not self.detected_issues_csv.exists():
+            with open(self.detected_issues_csv, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "paper_id",
+                    "phase",
+                    "iteration",
+                    "issue_number",
+                    "total_issues",
+                    "before",
+                    "reasoning",
+                    "after",
+                    "user_action",
+                    "timestamp",
+                ])
+
+        # parse_failures.csv
+        if not self.parse_failures_csv.exists():
+            with open(self.parse_failures_csv, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "paper_id",
+                    "phase",
+                    "iteration",
+                    "raw_response_preview",
+                    "error_message",
+                    "timestamp",
+                ])
+
+        # llm_calls.csv
+        if not self.llm_calls_csv.exists():
+            with open(self.llm_calls_csv, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "paper_id",
+                    "phase",
+                    "iteration",
+                    "model",
+                    "provider",
+                    "prompt_length",
+                    "response_length",
+                    "duration_seconds",
+                    "success",
+                    "timestamp",
+                ])
+
+        # user_actions.csv
+        if not self.user_actions_csv.exists():
+            with open(self.user_actions_csv, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "paper_id",
+                    "phase",
+                    "iteration",
+                    "action_type",
+                    "action_value",
+                    "context",
+                    "timestamp",
                 ])
 
     def record_embedded_error(
@@ -163,6 +228,115 @@ class DataManager:
                 reason,
                 timestamp,
                 example_case,
+            ])
+
+    def record_detected_issue(
+        self,
+        paper_id: str,
+        phase: str,
+        iteration: int,
+        issue_number: int,
+        total_issues: int,
+        before: str,
+        reasoning: str,
+        after: str,
+        user_action: str,
+    ):
+        """検出された個別の指摘事項を記録"""
+        timestamp = datetime.now().isoformat()
+
+        with open(self.detected_issues_csv, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                paper_id,
+                phase,
+                iteration,
+                issue_number,
+                total_issues,
+                before,
+                reasoning,
+                after,
+                user_action,
+                timestamp,
+            ])
+
+    def record_parse_failure(
+        self,
+        paper_id: str,
+        phase: str,
+        iteration: int,
+        raw_response: str,
+        error_message: str,
+    ):
+        """パース失敗を記録"""
+        timestamp = datetime.now().isoformat()
+
+        # レスポンスが長い場合は最初の500文字のみ保存
+        response_preview = raw_response[:500] if len(raw_response) > 500 else raw_response
+
+        with open(self.parse_failures_csv, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                paper_id,
+                phase,
+                iteration,
+                response_preview,
+                error_message,
+                timestamp,
+            ])
+
+    def record_llm_call(
+        self,
+        paper_id: str,
+        phase: str,
+        iteration: int,
+        model: str,
+        provider: str,
+        prompt_length: int,
+        response_length: int,
+        duration_seconds: float,
+        success: bool,
+    ):
+        """LLM API呼び出しを記録"""
+        timestamp = datetime.now().isoformat()
+
+        with open(self.llm_calls_csv, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                paper_id,
+                phase,
+                iteration,
+                model,
+                provider,
+                prompt_length,
+                response_length,
+                duration_seconds,
+                success,
+                timestamp,
+            ])
+
+    def record_user_action(
+        self,
+        paper_id: str,
+        phase: str,
+        iteration: int,
+        action_type: str,
+        action_value: str,
+        context: str = "",
+    ):
+        """ユーザーアクションを記録"""
+        timestamp = datetime.now().isoformat()
+
+        with open(self.user_actions_csv, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                paper_id,
+                phase,
+                iteration,
+                action_type,
+                action_value,
+                context,
+                timestamp,
             ])
 
     def record_summary(
