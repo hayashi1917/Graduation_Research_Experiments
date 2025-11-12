@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>論文校正実験システム</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- ナビゲーションバー -->
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-file-earmark-text"></i>
+                論文校正実験システム
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="badge bg-secondary me-2" id="connection-status">接続中...</span>
+                <button class="btn btn-outline-light btn-sm" id="settings-btn">
+                    <i class="bi bi-gear"></i> 設定
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <!-- サイドバー -->
+            <div class="col-md-3">
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-folder"></i> 論文管理</h5>
+                    </div>
+                    <div class="card-body">
+                        <!-- 論文アップロード -->
+                        <button class="btn btn-primary w-100 mb-3" data-bs-toggle="modal" data-bs-target="#uploadModal">
+                            <i class="bi bi-upload"></i> 論文をアップロード
+                        </button>
+
+                        <!-- 論文リスト -->
+                        <div id="papers-list">
+                            <p class="text-muted">論文を読み込み中...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- フェーズ選択 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-play-circle"></i> フェーズ実行</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-primary" id="phase1-btn" disabled>
+                                <i class="bi bi-1-circle"></i> フェーズ1: クリーン化
+                            </button>
+                            <button class="btn btn-outline-warning" id="phase2-btn" disabled>
+                                <i class="bi bi-2-circle"></i> フェーズ2: エラー埋め込み
+                            </button>
+                            <button class="btn btn-outline-success" id="phase3-btn" disabled>
+                                <i class="bi bi-3-circle"></i> フェーズ3: 校正
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- メインエリア -->
+            <div class="col-md-9">
+                <!-- 実行状態 -->
+                <div class="card mb-3" id="status-card" style="display: none;">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <span id="status-title">実行中...</span>
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-2">
+                            <strong>論文ID:</strong> <span id="current-paper-id">-</span>
+                        </div>
+                        <div class="mb-2">
+                            <strong>フェーズ:</strong> <span id="current-phase">-</span>
+                        </div>
+                        <div class="mb-2">
+                            <strong>イテレーション:</strong> <span id="current-iteration">0</span>
+                        </div>
+                        <div class="progress mt-3">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                 role="progressbar"
+                                 style="width: 0%"
+                                 id="progress-bar">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 指摘事項の判断UI -->
+                <div class="card mb-3" id="issue-card" style="display: none;">
+                    <div class="card-header bg-warning">
+                        <h5 class="mb-0">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            指摘事項の判断
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <strong>指摘 <span id="issue-number">1</span> / <span id="total-issues">3</span></strong>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">修正前の文:</label>
+                            <pre class="bg-light p-3 rounded" id="issue-before"></pre>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">根拠:</label>
+                            <p class="p-3 bg-light rounded" id="issue-reasoning"></p>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">修正後の文:</label>
+                            <pre class="bg-light p-3 rounded" id="issue-after"></pre>
+                        </div>
+
+                        <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                            <button class="btn btn-success" id="action-auto">
+                                <i class="bi bi-check-circle"></i> [A] 自動適用
+                            </button>
+                            <button class="btn btn-primary" id="action-manual">
+                                <i class="bi bi-pencil"></i> [M] 手動修正
+                            </button>
+                            <button class="btn btn-secondary" id="action-skip">
+                                <i class="bi bi-skip-forward"></i> [S] スキップ
+                            </button>
+                            <button class="btn btn-warning" id="action-difficult">
+                                <i class="bi bi-question-circle"></i> [D] 判断困難
+                            </button>
+                            <button class="btn btn-danger" id="action-quit">
+                                <i class="bi bi-x-circle"></i> [Q] 中断
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ログ表示 -->
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-terminal"></i> 実行ログ
+                        </h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="log-output" class="p-3" style="height: 400px; overflow-y: auto; background-color: #1e1e1e; color: #d4d4d4; font-family: 'Courier New', monospace; font-size: 14px;">
+                            <p class="mb-0">システム準備完了。論文を選択してフェーズを実行してください。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- イテレーション履歴 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-clock-history"></i> イテレーション履歴
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover" id="iterations-table">
+                                <thead>
+                                    <tr>
+                                        <th>論文ID</th>
+                                        <th>フェーズ</th>
+                                        <th>イテレーション</th>
+                                        <th>検出数</th>
+                                        <th>モデル</th>
+                                        <th>タイムスタンプ</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted">
+                                            履歴データがありません
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- アップロードモーダル -->
+    <div class="modal fade" id="uploadModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">論文のアップロード</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="upload-form">
+                        <div class="mb-3">
+                            <label for="paper-id-input" class="form-label">論文ID</label>
+                            <input type="text" class="form-control" id="paper-id-input" required
+                                   placeholder="例: paper001">
+                        </div>
+                        <div class="mb-3">
+                            <label for="pdf-file-input" class="form-label">PDFファイル</label>
+                            <input type="file" class="form-control" id="pdf-file-input"
+                                   accept=".pdf" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="tex-file-input" class="form-label">TeXファイル</label>
+                            <input type="file" class="form-control" id="tex-file-input"
+                                   accept=".tex" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        キャンセル
+                    </button>
+                    <button type="button" class="btn btn-primary" id="upload-submit-btn">
+                        アップロード
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 設定モーダル -->
+    <div class="modal fade" id="settingsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">システム設定</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <h6>LLM設定 - 校正用</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">プロバイダー</label>
+                                <input type="text" class="form-control" id="proofreading-provider"
+                                       value="gemini" readonly>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">モデル</label>
+                                <input type="text" class="form-control" id="proofreading-model"
+                                       value="gemini-2.5-pro">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <h6>LLM設定 - エラー埋め込み用</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">プロバイダー</label>
+                                <input type="text" class="form-control" id="embedding-provider"
+                                       value="anthropic" readonly>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">モデル</label>
+                                <input type="text" class="form-control" id="embedding-model"
+                                       value="claude-3-5-sonnet-20241022">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        閉じる
+                    </button>
+                    <button type="button" class="btn btn-primary" id="settings-save-btn">
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Custom JavaScript -->
+    <script src="/static/js/websocket.js"></script>
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

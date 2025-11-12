@@ -45,6 +45,17 @@ paper_proofreading_experiment/
 │           └── phase3_iter1_20250107_130000/
 │               ├── paper001.pdf
 │               └── paper001.tex
+├── backend/                  # Web UI バックエンド
+│   ├── api.py                # FastAPI メインファイル
+│   └── requirements.txt      # API用依存パッケージ
+├── frontend/                 # Web UI フロントエンド
+│   ├── index.html            # メインページ
+│   ├── css/
+│   │   └── style.css         # カスタムスタイル
+│   └── js/
+│       ├── app.js            # アプリケーションロジック
+│       ├── api.js            # API通信
+│       └── websocket.js      # WebSocket処理
 ├── src/
 │   ├── llm_client.py         # LLM API呼び出し
 │   ├── response_parser.py    # LLM応答のパース
@@ -53,8 +64,9 @@ paper_proofreading_experiment/
 │   ├── phase1_cleaner.py     # フェーズ1: クリーン化
 │   ├── phase2_embedder.py    # フェーズ2: 誤り埋め込み
 │   ├── phase3_proofreader.py # フェーズ3: 校正実験
-│   └── main.py               # メインプログラム
-├── requirements.txt
+│   └── main.py               # メインプログラム（CLI）
+├── run_server.py             # Webサーバー起動スクリプト
+├── requirements.txt          # CLI用依存パッケージ
 └── README.md
 ```
 
@@ -128,6 +140,64 @@ data/papers/
 サンプルが既に用意されていますが、実験では「後藤版 英語論文自己チェックリスト」など、実際のチェックリストに置き換えてください。
 
 ## 使用方法
+
+このプログラムには2つの実行方法があります：
+
+### 方法1: Web UI（推奨）
+
+ブラウザベースのインターフェースで直感的に操作できます。
+
+#### 1. Webサーバーの起動
+
+```bash
+# プロジェクトディレクトリに移動
+cd paper_proofreading_experiment
+
+# 仮想環境を有効化
+source venv/bin/activate
+
+# Web UI用の依存パッケージをインストール（初回のみ）
+pip install -r backend/requirements.txt
+
+# Webサーバーを起動
+python run_server.py
+```
+
+#### 2. ブラウザでアクセス
+
+ブラウザで以下のURLを開きます：
+
+```
+http://localhost:8000
+```
+
+#### 3. Web UIの使い方
+
+1. **論文のアップロード**
+   - 「論文をアップロード」ボタンをクリック
+   - 論文ID、PDFファイル、TeXファイルを選択してアップロード
+
+2. **論文の選択**
+   - 左サイドバーの論文リストから実験対象の論文を選択
+
+3. **フェーズの実行**
+   - フェーズボタン（フェーズ1、2、3）をクリックして実行
+   - リアルタイムでログと進捗が表示されます
+
+4. **指摘の判断**
+   - 指摘が検出されると自動的に表示されます
+   - ボタンまたはキーボード（A/M/S/D/Q）で判断を入力
+
+5. **履歴の確認**
+   - 画面下部でイテレーション履歴を確認できます
+
+**Web UIの利点:**
+- リアルタイムで進捗を確認できる
+- 直感的なUIで操作が簡単
+- 複数のブラウザタブで同時に作業可能
+- イテレーション履歴を視覚的に確認
+
+### 方法2: コマンドライン（従来型）
 
 **重要**: プログラムを実行する前に、必ず仮想環境を有効化してください。
 

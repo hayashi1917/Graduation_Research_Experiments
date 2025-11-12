@@ -1,0 +1,157 @@
+/* カスタムスタイル */
+
+body {
+    background-color: #f8f9fa;
+}
+
+.navbar-brand {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.card {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    border: none;
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 2px solid #e9ecef;
+    font-weight: 600;
+}
+
+/* 論文リスト */
+.paper-item {
+    padding: 10px;
+    margin-bottom: 8px;
+    background-color: #f8f9fa;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-left: 3px solid transparent;
+}
+
+.paper-item:hover {
+    background-color: #e9ecef;
+    border-left-color: #0d6efd;
+}
+
+.paper-item.active {
+    background-color: #d1e7ff;
+    border-left-color: #0d6efd;
+}
+
+.paper-item small {
+    color: #6c757d;
+}
+
+/* ログ出力 */
+#log-output {
+    line-height: 1.5;
+}
+
+#log-output .log-info {
+    color: #4fc3f7;
+}
+
+#log-output .log-success {
+    color: #66bb6a;
+}
+
+#log-output .log-warning {
+    color: #ffa726;
+}
+
+#log-output .log-error {
+    color: #ef5350;
+}
+
+#log-output .log-timestamp {
+    color: #9e9e9e;
+    margin-right: 10px;
+}
+
+/* コードブロック */
+pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* 接続ステータス */
+#connection-status.connected {
+    background-color: #198754 !important;
+}
+
+#connection-status.disconnected {
+    background-color: #dc3545 !important;
+}
+
+/* アニメーション */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .col-md-3,
+    .col-md-9 {
+        margin-bottom: 1rem;
+    }
+
+    #log-output {
+        height: 250px !important;
+    }
+}
+
+/* ボタン無効化時のスタイル */
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* テーブルのスタイル */
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+}
+
+/* プログレスバー */
+.progress {
+    height: 25px;
+}
+
+.progress-bar {
+    font-size: 14px;
+    line-height: 25px;
+}
+
+/* カスタムスクロールバー（Webkit） */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
