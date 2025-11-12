@@ -29,14 +29,12 @@ class WebSocketPhase1Adapter:
         paper_manager: PaperManager,
         prompt_template: str,
         checklist: str,
-        max_iterations: int = 10,
     ):
         self.llm_client = llm_client
         self.data_manager = data_manager
         self.paper_manager = paper_manager
         self.prompt_template = prompt_template
         self.checklist = checklist
-        self.max_iterations = max_iterations
         self.parser = ResponseParser()
 
         # ユーザーアクション待ち用
@@ -64,7 +62,7 @@ class WebSocketPhase1Adapter:
         iteration = 0
         stopped_reason = ""
 
-        while iteration < self.max_iterations:
+        while True:
             iteration += 1
 
             await websocket.send_json({
@@ -375,15 +373,6 @@ class WebSocketPhase1Adapter:
                 stopped_reason = "user_stop"
                 break
 
-        # 最大反復回数に到達
-        if iteration >= self.max_iterations and stopped_reason == "":
-            stopped_reason = "max_iterations"
-            await websocket.send_json({
-                "type": "log",
-                "message": f"最大反復回数（{self.max_iterations}）に到達しました",
-                "level": "warning"
-            })
-
         await websocket.send_json({
             "type": "log",
             "message": f"フェーズ1完了 - 総イテレーション数: {iteration}",
@@ -507,7 +496,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
         iteration = 0
         stopped_reason = ""
 
-        while iteration < self.max_iterations:
+        while True:
             iteration += 1
 
             await websocket.send_json({
@@ -793,14 +782,6 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
             if continue_choice != "Y":
                 stopped_reason = "user_stop"
                 break
-
-        if iteration >= self.max_iterations and stopped_reason == "":
-            stopped_reason = "max_iterations"
-            await websocket.send_json({
-                "type": "log",
-                "message": f"最大反復回数（{self.max_iterations}）に到達しました",
-                "level": "warning"
-            })
 
         return {
             "iterations": iteration,
