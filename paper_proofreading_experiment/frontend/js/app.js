@@ -265,9 +265,30 @@ function handleWebSocketMessage(data) {
             addLogMessage(data.message, data.level || 'info');
             break;
 
+        case 'user_choice_required':
+            handleUserChoice(data.message, data.choices);
+            break;
+
         default:
             console.log('未処理のメッセージタイプ:', data.type);
     }
+}
+
+/**
+ * ユーザー選択を処理
+ */
+async function handleUserChoice(message, choices) {
+    // シンプルなconfirmダイアログを使用
+    const confirmed = confirm(message);
+    const choice = confirmed ? choices[0] : choices[1];
+
+    // 選択をサーバーに送信
+    wsManager.send({
+        type: 'action',
+        action: choice,
+    });
+
+    addLogMessage(`選択: ${choice}`, 'info');
 }
 
 /**

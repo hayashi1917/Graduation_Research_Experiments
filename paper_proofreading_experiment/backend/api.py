@@ -5,6 +5,7 @@ FastAPI バックエンド - 論文校正実験用Web UI
 import asyncio
 import json
 import sys
+import os
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -17,14 +18,13 @@ import uvicorn
 
 # srcディレクトリをパスに追加
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
 
 from llm_client import LLMClient
 from data_manager import DataManager
-from response_parser import ResponseParser, ProofreadingIssue
+from response_parser import ResponseParser
 from paper_manager import PaperManager
-from phase1_cleaner import Phase1Cleaner
-from phase2_embedder import Phase2Embedder
-from phase3_proofreader import Phase3Proofreader
+from websocket_adapters import WebSocketPhase1Adapter, WebSocketPhase3Adapter
 
 import yaml
 
@@ -48,37 +48,39 @@ app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
 # WebSocket接続管理
 class ConnectionManager:
     def __init__(self):
-        self.active_connections: List[WebSocket] = []
+        self.active_connections: Dict[str, WebSocket] = {}
+        self.phase_adapters: Dict[str, any] = {}  # 実行中のアダプター
 
-    async def connect(self, websocket: WebSocket):
+    async def connect(self, websocket: WebSocket, client_id: str):
         await websocket.accept()
-        self.active_connections.append(websocket)
+        self.active_connections[client_id] = websocket
 
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+    def disconnect(self, client_id: str):
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
+        if client_id in self.phase_adapters:
+            del self.phase_adapters[client_id]
 
-    async def send_message(self, message: dict, websocket: WebSocket):
-        await websocket.send_json(message)
+    async def send_message(self, message: dict, client_id: str):
+        if client_id in self.active_connections:
+            await self.active_connections[client_id].send_json(message)
 
-    async def broadcast(self, message: dict):
-        for connection in self.active_connections:
-            await connection.send_json(message)
+    def set_adapter(self, client_id: str, adapter):
+        self.phase_adapters[client_id] = adapter
+
+    def get_adapter(self, client_id: str):
+        return self.phase_adapters.get(client_id)
 
 manager = ConnectionManager()
-
-# グローバル変数（実行状態管理）
-current_execution = {
-    "status": "idle",  # idle, running, paused, completed
-    "phase": None,
-    "paper_id": None,
-    "iteration": 0,
-    "pending_action": None,  # 判断待ちの指摘
-}
 
 # 設定とデータマネージャーの初期化
 config_dir = Path(__file__).parent.parent / "config"
 data_dir = Path(__file__).parent.parent / "data"
 papers_dir = Path(__file__).parent.parent / "papers"
+
+# ディレクトリ作成
+papers_dir.mkdir(parents=True, exist_ok=True)
+data_dir.mkdir(parents=True, exist_ok=True)
 
 settings = yaml.safe_load((config_dir / "settings.yaml").read_text(encoding="utf-8"))
 prompts = yaml.safe_load((config_dir / "prompts.yaml").read_text(encoding="utf-8"))
@@ -218,7 +220,11 @@ async def get_iterations(paper_id: str):
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket接続"""
-    await manager.connect(websocket)
+    # クライアントIDを生成
+    client_id = f"client_{id(websocket)}"
+
+    await manager.connect(websocket, client_id)
+
     try:
         while True:
             data = await websocket.receive_json()
@@ -227,12 +233,16 @@ async def websocket_endpoint(websocket: WebSocket):
             if data.get("type") == "action":
                 # ユーザーの判断を受信
                 action = data.get("action")
-                current_execution["user_action"] = action
+
+                # 実行中のアダプターにアクションを通知
+                adapter = manager.get_adapter(client_id)
+                if adapter:
+                    adapter.set_user_action(action)
 
                 await manager.send_message({
                     "type": "action_received",
                     "action": action,
-                }, websocket)
+                }, client_id)
 
             elif data.get("type") == "start_phase":
                 # フェーズ実行を開始
@@ -240,19 +250,18 @@ async def websocket_endpoint(websocket: WebSocket):
                 phase = data.get("phase")
 
                 # バックグラウンドで実行
-                asyncio.create_task(execute_phase(paper_id, phase, websocket))
+                asyncio.create_task(execute_phase(paper_id, phase, websocket, client_id))
 
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        manager.disconnect(client_id)
+    except Exception as e:
+        print(f"WebSocketエラー: {e}")
+        manager.disconnect(client_id)
 
 
-async def execute_phase(paper_id: str, phase: str, websocket: WebSocket):
+async def execute_phase(paper_id: str, phase: str, websocket: WebSocket, client_id: str):
     """フェーズを実行（バックグラウンドタスク）"""
     try:
-        current_execution["status"] = "running"
-        current_execution["phase"] = phase
-        current_execution["paper_id"] = paper_id
-
         # 論文ファイルのパスを取得
         paper_dir = papers_dir / paper_id
         pdf_files = list(paper_dir.glob("*.pdf"))
@@ -262,7 +271,7 @@ async def execute_phase(paper_id: str, phase: str, websocket: WebSocket):
             await manager.send_message({
                 "type": "error",
                 "message": "論文ファイルが見つかりません",
-            }, websocket)
+            }, client_id)
             return
 
         pdf_path = pdf_files[0]
@@ -274,80 +283,235 @@ async def execute_phase(paper_id: str, phase: str, websocket: WebSocket):
         else:  # phase2
             llm_config = settings["llm"]["error_embedding"]
 
+        # APIキーを環境変数から取得
+        api_key = None
+        if llm_config["provider"] == "gemini":
+            api_key = os.getenv("GEMINI_API_KEY")
+        elif llm_config["provider"] == "anthropic":
+            api_key = os.getenv("ANTHROPIC_API_KEY")
+
         llm_client = LLMClient(
             provider=llm_config["provider"],
             model=llm_config["model"],
             temperature=llm_config.get("temperature", 0.0),
-            api_key=None,  # 環境変数から取得
+            api_key=api_key,
         )
 
         # フェーズ実行
         if phase == "phase1":
-            await execute_phase1(paper_id, pdf_path, tex_path, llm_client, websocket)
+            await execute_phase1(paper_id, pdf_path, tex_path, llm_client, websocket, client_id)
         elif phase == "phase2":
-            await execute_phase2(paper_id, pdf_path, tex_path, llm_client, websocket)
+            await execute_phase2(paper_id, pdf_path, tex_path, llm_client, websocket, client_id)
         elif phase == "phase3":
-            await execute_phase3(paper_id, pdf_path, tex_path, llm_client, websocket)
-
-        current_execution["status"] = "idle"
+            await execute_phase3(paper_id, pdf_path, tex_path, llm_client, websocket, client_id)
 
     except Exception as e:
+        import traceback
+        error_msg = f"{str(e)}\n{traceback.format_exc()}"
         await manager.send_message({
             "type": "error",
-            "message": str(e),
-        }, websocket)
-        current_execution["status"] = "idle"
+            "message": error_msg,
+        }, client_id)
 
 
-async def execute_phase1(paper_id: str, pdf_path: Path, tex_path: Path, llm_client: LLMClient, websocket: WebSocket):
+async def execute_phase1(
+    paper_id: str,
+    pdf_path: Path,
+    tex_path: Path,
+    llm_client: LLMClient,
+    websocket: WebSocket,
+    client_id: str
+):
     """フェーズ1を実行"""
-    # Phase1Cleanerの実装をWebSocket対応に修正する必要がある
-    # ここでは簡略化のため、基本的な流れのみ実装
+    try:
+        await manager.send_message({
+            "type": "phase_start",
+            "phase": "phase1",
+            "message": "フェーズ1: クリーン化を開始",
+        }, client_id)
 
-    await manager.send_message({
-        "type": "phase_start",
-        "phase": "phase1",
-        "message": "フェーズ1: クリーン化を開始",
-    }, websocket)
+        # WebSocketアダプターを作成
+        adapter = WebSocketPhase1Adapter(
+            llm_client=llm_client,
+            data_manager=data_manager,
+            paper_manager=paper_manager,
+            prompt_template=prompts["prompt_a_and_c"],
+            checklist=checklist,
+            max_iterations=settings["experiment"]["max_iterations"],
+        )
 
-    # 実装中...
-    await manager.send_message({
-        "type": "phase_complete",
-        "phase": "phase1",
-        "message": "フェーズ1が完了しました",
-    }, websocket)
+        # アダプターを登録
+        manager.set_adapter(client_id, adapter)
+
+        # 実行
+        result = await adapter.run(
+            paper_id=paper_id,
+            pdf_path=pdf_path,
+            tex_path=tex_path,
+            websocket=websocket,
+        )
+
+        await manager.send_message({
+            "type": "phase_complete",
+            "phase": "phase1",
+            "message": f"フェーズ1が完了しました（イテレーション: {result['iterations']}）",
+            "result": result,
+        }, client_id)
+
+    except Exception as e:
+        import traceback
+        await manager.send_message({
+            "type": "error",
+            "message": f"フェーズ1実行エラー: {str(e)}\n{traceback.format_exc()}",
+        }, client_id)
+    finally:
+        # アダプターを削除
+        if client_id in manager.phase_adapters:
+            del manager.phase_adapters[client_id]
 
 
-async def execute_phase2(paper_id: str, pdf_path: Path, tex_path: Path, llm_client: LLMClient, websocket: WebSocket):
+async def execute_phase2(
+    paper_id: str,
+    pdf_path: Path,
+    tex_path: Path,
+    llm_client: LLMClient,
+    websocket: WebSocket,
+    client_id: str
+):
     """フェーズ2を実行"""
-    await manager.send_message({
-        "type": "phase_start",
-        "phase": "phase2",
-        "message": "フェーズ2: エラー埋め込みを開始",
-    }, websocket)
+    try:
+        await manager.send_message({
+            "type": "phase_start",
+            "phase": "phase2",
+            "message": "フェーズ2: エラー埋め込みを開始",
+        }, client_id)
 
-    # 実装中...
-    await manager.send_message({
-        "type": "phase_complete",
-        "phase": "phase2",
-        "message": "フェーズ2が完了しました",
-    }, websocket)
+        # 除外項目を取得
+        excluded_items = data_manager.get_excluded_items(paper_id)
+        excluded_items_str = "\n".join([f"- {item}" for item in excluded_items]) if excluded_items else "なし"
+
+        # プロンプトを構築
+        prompt = prompts["prompt_b"].format(
+            num_errors=settings["experiment"]["num_errors"],
+            max_errors_per_item=settings["experiment"]["max_errors_per_item"],
+            excluded_items=excluded_items_str,
+            checklist=checklist,
+        )
+
+        # プロンプトを保存
+        data_manager.save_prompt(
+            paper_id=paper_id,
+            phase="phase2",
+            iteration=1,
+            prompt=prompt,
+        )
+
+        await manager.send_message({
+            "type": "log",
+            "message": "LLMにエラー埋め込みを依頼中...",
+            "level": "info"
+        }, client_id)
+
+        # LLMを呼び出す
+        response = llm_client.call(
+            prompt=prompt,
+            pdf_path=pdf_path,
+            tex_path=tex_path,
+        )
+
+        # 応答を保存
+        data_manager.save_response(
+            paper_id=paper_id,
+            phase="phase2",
+            iteration=1,
+            response=response,
+        )
+
+        await manager.send_message({
+            "type": "llm_response",
+            "message": "LLMの応答を受信しました",
+        }, client_id)
+
+        await manager.send_message({
+            "type": "log",
+            "message": f"エラー埋め込みの提案を受信しました\n\n{response[:1000]}...",
+            "level": "info"
+        }, client_id)
+
+        await manager.send_message({
+            "type": "log",
+            "message": "手動で論文ファイルにエラーを埋め込んでください",
+            "level": "warning"
+        }, client_id)
+
+        await manager.send_message({
+            "type": "phase_complete",
+            "phase": "phase2",
+            "message": "フェーズ2が完了しました。提案されたエラーを確認し、手動で論文に反映してください。",
+        }, client_id)
+
+    except Exception as e:
+        import traceback
+        await manager.send_message({
+            "type": "error",
+            "message": f"フェーズ2実行エラー: {str(e)}\n{traceback.format_exc()}",
+        }, client_id)
 
 
-async def execute_phase3(paper_id: str, pdf_path: Path, tex_path: Path, llm_client: LLMClient, websocket: WebSocket):
+async def execute_phase3(
+    paper_id: str,
+    pdf_path: Path,
+    tex_path: Path,
+    llm_client: LLMClient,
+    websocket: WebSocket,
+    client_id: str
+):
     """フェーズ3を実行"""
-    await manager.send_message({
-        "type": "phase_start",
-        "phase": "phase3",
-        "message": "フェーズ3: 校正を開始",
-    }, websocket)
+    try:
+        await manager.send_message({
+            "type": "phase_start",
+            "phase": "phase3",
+            "message": "フェーズ3: 校正を開始",
+        }, client_id)
 
-    # 実装中...
-    await manager.send_message({
-        "type": "phase_complete",
-        "phase": "phase3",
-        "message": "フェーズ3が完了しました",
-    }, websocket)
+        # WebSocketアダプターを作成（Phase3はPhase1と同じロジック）
+        adapter = WebSocketPhase3Adapter(
+            llm_client=llm_client,
+            data_manager=data_manager,
+            paper_manager=paper_manager,
+            prompt_template=prompts["prompt_a_and_c"],
+            checklist=checklist,
+            max_iterations=settings["experiment"]["max_iterations"],
+        )
+
+        # アダプターを登録
+        manager.set_adapter(client_id, adapter)
+
+        # 実行
+        result = await adapter.run(
+            paper_id=paper_id,
+            pdf_path=pdf_path,
+            tex_path=tex_path,
+            websocket=websocket,
+        )
+
+        await manager.send_message({
+            "type": "phase_complete",
+            "phase": "phase3",
+            "message": f"フェーズ3が完了しました（イテレーション: {result['iterations']}）",
+            "result": result,
+        }, client_id)
+
+    except Exception as e:
+        import traceback
+        await manager.send_message({
+            "type": "error",
+            "message": f"フェーズ3実行エラー: {str(e)}\n{traceback.format_exc()}",
+        }, client_id)
+    finally:
+        # アダプターを削除
+        if client_id in manager.phase_adapters:
+            del manager.phase_adapters[client_id]
 
 
 if __name__ == "__main__":
