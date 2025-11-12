@@ -351,7 +351,6 @@ async def execute_phase1(
             paper_manager=paper_manager,
             prompt_template=prompts["prompt_a_and_c"]["template"],
             checklist=checklist,
-            max_iterations=settings["experiment"]["max_iterations"],
         )
 
         # アダプターを登録
@@ -495,7 +494,6 @@ async def execute_phase3(
             paper_manager=paper_manager,
             prompt_template=prompts["prompt_a_and_c"]["template"],
             checklist=checklist,
-            max_iterations=settings["experiment"]["max_iterations"],
         )
 
         # アダプターを登録
