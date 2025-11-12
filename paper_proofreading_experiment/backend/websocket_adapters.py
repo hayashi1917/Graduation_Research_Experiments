@@ -278,31 +278,9 @@ class WebSocketPhase1Adapter:
                     stopped_reason = "user_abort"
                     break
 
-            # 中断判定
+            # 中断判定 - 記録せずに終了
             if stopped_reason == "user_abort":
-                self.data_manager.record_iteration(
-                    paper_id=paper_id,
-                    phase="phase1",
-                    iteration=iteration,
-                    llm_model=self.llm_client.model,
-                    detected_errors=detected_in_iteration,
-                    new_issues_count=len(detected_in_iteration),
-                    excluded_items=excluded_items,
-                    stopped_reason=stopped_reason,
-                )
                 break
-
-            # イテレーションログを記録
-            self.data_manager.record_iteration(
-                paper_id=paper_id,
-                phase="phase1",
-                iteration=iteration,
-                llm_model=self.llm_client.model,
-                detected_errors=detected_in_iteration,
-                new_issues_count=len(detected_in_iteration),
-                excluded_items=excluded_items,
-                stopped_reason="",
-            )
 
             # 次のイテレーションに進むか確認
             continue_choice = await self.wait_for_user_choice(
@@ -638,30 +616,11 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                     stopped_reason = "user_abort"
                     break
 
+            # 中断判定 - 記録せずに終了
             if stopped_reason == "user_abort":
-                self.data_manager.record_iteration(
-                    paper_id=paper_id,
-                    phase=phase,
-                    iteration=iteration,
-                    llm_model=self.llm_client.model,
-                    detected_errors=detected_in_iteration,
-                    new_issues_count=len(detected_in_iteration),
-                    excluded_items=excluded_items,
-                    stopped_reason=stopped_reason,
-                )
                 break
 
-            self.data_manager.record_iteration(
-                paper_id=paper_id,
-                phase=phase,
-                iteration=iteration,
-                llm_model=self.llm_client.model,
-                detected_errors=detected_in_iteration,
-                new_issues_count=len(detected_in_iteration),
-                excluded_items=excluded_items,
-                stopped_reason="",
-            )
-
+            # 次のイテレーションに進むか確認
             continue_choice = await self.wait_for_user_choice(
                 websocket,
                 "次のイテレーションに進みますか？",
