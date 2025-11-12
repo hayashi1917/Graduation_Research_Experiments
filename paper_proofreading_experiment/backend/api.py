@@ -349,7 +349,7 @@ async def execute_phase1(
             llm_client=llm_client,
             data_manager=data_manager,
             paper_manager=paper_manager,
-            prompt_template=prompts["prompt_a_and_c"],
+            prompt_template=prompts["prompt_a_and_c"]["template"],
             checklist=checklist,
             max_iterations=settings["experiment"]["max_iterations"],
         )
@@ -405,7 +405,7 @@ async def execute_phase2(
         excluded_items_str = "\n".join([f"- {item}" for item in excluded_items]) if excluded_items else "なし"
 
         # プロンプトを構築
-        prompt = prompts["prompt_b"].format(
+        prompt = prompts["prompt_b"]["template"].format(
             num_errors=settings["experiment"]["num_errors"],
             max_errors_per_item=settings["experiment"]["max_errors_per_item"],
             excluded_items=excluded_items_str,
@@ -493,7 +493,7 @@ async def execute_phase3(
             llm_client=llm_client,
             data_manager=data_manager,
             paper_manager=paper_manager,
-            prompt_template=prompts["prompt_a_and_c"],
+            prompt_template=prompts["prompt_a_and_c"]["template"],
             checklist=checklist,
             max_iterations=settings["experiment"]["max_iterations"],
         )
