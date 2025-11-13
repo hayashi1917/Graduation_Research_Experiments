@@ -9,11 +9,17 @@ class WebSocketManager {
         this.maxReconnectAttempts = 5;
         this.reconnectDelay = 2000;
         this.messageHandlers = [];
+        this.clientId = this.generateClientId();
+    }
+
+    generateClientId() {
+        const randomPart = Math.random().toString(36).slice(2, 10);
+        return `client_${Date.now()}_${randomPart}`;
     }
 
     connect() {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.host}/ws`;
+        const wsUrl = `${protocol}//${window.location.host}/ws/${this.clientId}`;
 
         console.log('WebSocket接続を試みています:', wsUrl);
 

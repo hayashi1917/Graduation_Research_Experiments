@@ -102,7 +102,11 @@ function setupEventListeners() {
 async function loadPapers() {
     try {
         const data = await API.getPapers();
-        displayPapers(data.papers);
+        const papers = Array.isArray(data)
+            ? data
+            : (data && Array.isArray(data.papers) ? data.papers : []);
+
+        displayPapers(papers);
     } catch (error) {
         addLogMessage('論文リストの読み込みに失敗しました: ' + error.message, 'error');
     }
