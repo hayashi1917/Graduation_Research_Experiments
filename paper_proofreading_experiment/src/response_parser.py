@@ -3,9 +3,10 @@ LLM応答パーサー（Pydanticベース）
 LLMの応答から修正点を抽出する
 """
 
+import ast
 import re
 import json
-from typing import List, Optional
+from typing import Any, Iterable, List, Mapping, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -171,7 +172,104 @@ class ResponseParser:
                 except (json.JSONDecodeError, Exception):
                     continue
 
+                # データがリストの場合
+                if isinstance(data, list):
+                    issues = self._build_issue_models(data)
+                    return ProofreadingParseResult(
+                        issues=issues,
+                        no_issues=len(issues) == 0,
+                    )
+
+                # データが辞書の場合
+                elif isinstance(data, dict):
+                    # Pydanticモデルを使ってパース
+                    try:
+                        # no_issuesフラグがある場合
+                        if 'no_issues' in data:
+                            if data['no_issues'] is True:
+                                # 修正点なし
+                                return ProofreadingParseResult(issues=[], no_issues=True)
+                            # no_issues: false の場合、issuesを処理
+                            elif 'issues' in data:
+                                issues = self._build_issue_models(data['issues'])
+                                return ProofreadingParseResult(
+                                    issues=issues,
+                                    no_issues=False,
+                                )
+
+                        # issuesキーがある場合（no_issuesフィールドなし）
+                        elif 'issues' in data:
+                            issues = self._build_issue_models(data['issues'])
+                            return ProofreadingParseResult(
+                                issues=issues,
+                                no_issues=len(issues) == 0,
+                            )
+
+                        # 単一の指摘の場合
+                        elif all(k in data for k in ['before', 'after', 'reasoning']):
+                            issues = self._build_issue_models([data])
+                            if issues:
+                                return ProofreadingParseResult(
+                                    issues=issues,
+                                    no_issues=False,
+                                )
+
+                    except Exception:
+                        continue
+
         return None  # パース失敗
+
+    def _build_issue_models(
+        self,
+        raw_items: Iterable[Mapping[str, Any]]
+    ) -> List[ProofreadingIssue]:
+        """Dictの配列からProofreadingIssueリストを生成"""
+
+        issues: List[ProofreadingIssue] = []
+        for idx, raw in enumerate(raw_items, 1):
+            if not isinstance(raw, Mapping):
+                continue
+
+            normalized = dict(raw)
+            normalized.setdefault('issue_number', idx)
+            try:
+                issues.append(ProofreadingIssue(**normalized))
+            except Exception:
+                continue
+
+        return issues
+
+    def _loads_json_lenient(self, json_candidate: str) -> Optional[Any]:
+        """多少フォーマットが崩れたJSONライクな文字列を解析"""
+
+        try:
+            return json.loads(json_candidate)
+        except json.JSONDecodeError:
+            pass
+
+        # JSONとしては不正でも、Pythonリテラルとして解釈できる場合がある
+        sanitized = self._sanitize_json_like(json_candidate)
+
+        try:
+            return ast.literal_eval(sanitized)
+        except Exception:
+            return None
+
+    def _sanitize_json_like(self, text: str) -> str:
+        """literal_evalが扱えるように最低限のトークンを正規化"""
+
+        replacements = {
+            r'(?<!["\'])\btrue\b(?!["\'])': 'True',
+            r'(?<!["\'])\bfalse\b(?!["\'])': 'False',
+            r'(?<!["\'])\bnull\b(?!["\'])': 'None',
+        }
+
+        sanitized = text
+        for pattern, replacement in replacements.items():
+            sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
+
+        return sanitized
+
 
     def _detect_no_issue_phrase(self, response: str) -> bool:
         """テキストから指摘なしのメッセージを検出"""

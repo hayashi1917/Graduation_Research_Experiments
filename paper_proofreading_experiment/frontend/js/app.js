@@ -10,6 +10,8 @@ const AppState = {
     isRunning: false,
 };
 
+let skipModalInstance = null;
+
 // ページロード時の初期化
 document.addEventListener('DOMContentLoaded', () => {
     console.log('アプリケーション初期化');
@@ -60,6 +62,11 @@ function setupEventListeners() {
     document.getElementById('action-accept').addEventListener('click', () => sendAction('A'));
     document.getElementById('action-skip').addEventListener('click', () => sendAction('S'));
     document.getElementById('action-quit').addEventListener('click', () => sendAction('Q'));
+
+    // スキップモーダル
+    document.getElementById('skip-submit-btn').addEventListener('click', handleSkipSubmit);
+    const skipItemInput = document.getElementById('skip-item-input');
+    skipItemInput.addEventListener('input', () => skipItemInput.classList.remove('is-invalid'));
 
     // コピーボタン
     document.getElementById('copy-before-btn').addEventListener('click', () => copyToClipboard('issue-before', 'copy-before-btn'));
@@ -221,6 +228,11 @@ function startPhase(phase) {
  * ユーザーのアクションを送信
  */
 function sendAction(action) {
+    if (action === 'S') {
+        openSkipModal();
+        return;
+    }
+
     wsManager.send({
         type: 'action',
         action: action,
@@ -230,6 +242,50 @@ function sendAction(action) {
     document.getElementById('issue-card').style.display = 'none';
 
     addLogMessage(`アクションを送信: [${action}]`, 'info');
+}
+
+function openSkipModal() {
+    const modalElement = document.getElementById('skipModal');
+    skipModalInstance = bootstrap.Modal.getOrCreateInstance(modalElement, {
+        backdrop: 'static',
+        keyboard: false,
+    });
+
+    document.getElementById('skip-item-input').value = '';
+    document.getElementById('skip-item-input').classList.remove('is-invalid');
+    document.getElementById('skip-reason-input').value = '';
+
+    skipModalInstance.show();
+}
+
+function handleSkipSubmit() {
+    const itemInput = document.getElementById('skip-item-input');
+    const reasonInput = document.getElementById('skip-reason-input');
+
+    const checklistItem = itemInput.value.trim();
+    const reason = reasonInput.value.trim();
+
+    if (!checklistItem) {
+        itemInput.classList.add('is-invalid');
+        addLogMessage('チェックリスト項目名を入力してください', 'error');
+        return;
+    }
+
+    if (skipModalInstance) {
+        skipModalInstance.hide();
+    }
+
+    wsManager.send({
+        type: 'action',
+        action: 'S',
+        payload: {
+            checklist_item: checklistItem,
+            reason: reason,
+        },
+    });
+
+    document.getElementById('issue-card').style.display = 'none';
+    addLogMessage(`除外項目を送信: ${checklistItem}`, 'info');
 }
 
 /**

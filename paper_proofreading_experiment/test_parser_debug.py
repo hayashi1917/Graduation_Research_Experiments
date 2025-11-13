@@ -97,6 +97,20 @@ elif parse_result.no_issues:
 else:
     print("指摘が抽出されませんでした。")
 
+print("\n" + "="*70)
+print("追加テスト: JSONが少し壊れていてもno_issuesを検出できるか")
+print("="*70)
+
+no_issue_response = """Gemini 2.5 Pro response:
+```json
+{'no_issues': true, 'issues': []}
+```
+"""
+
+no_issue_result = parser.parse_proofreading_response(no_issue_response)
+print(f"指摘なし判定: {no_issue_result.no_issues}")
+print(f"抽出された指摘数: {len(no_issue_result.issues)}")
+
 # より詳細なデバッグ: 応答を行ごとに表示
 print("\n" + "="*70)
 print("応答の詳細分析（各行の内容）:")

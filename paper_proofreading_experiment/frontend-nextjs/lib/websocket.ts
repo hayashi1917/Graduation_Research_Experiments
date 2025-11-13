@@ -106,11 +106,12 @@ export class WebSocketManager {
     }
   }
 
-  sendAction(action: string): void {
-    console.log('[WebSocket] アクション送信:', action);
+  sendAction(action: string, payload?: Record<string, any>): void {
+    console.log('[WebSocket] アクション送信:', action, payload);
     this.sendMessage({
       type: 'action',
       action,
+      ...(payload ? { payload } : {}),
     });
   }
 

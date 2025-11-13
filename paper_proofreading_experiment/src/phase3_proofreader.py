@@ -158,8 +158,6 @@ class Phase3Proofreader:
 
             # インタラクティブな判断
             detected_in_iteration = []
-            new_excluded = []
-
             for issue in issues:
                 print(f"\n{'='*60}")
                 print(f"【指摘 {issue.issue_number}/{len(issues)}】")
@@ -175,7 +173,19 @@ class Phase3Proofreader:
                     detected_in_iteration.append(f"issue_{issue.issue_number}_accepted")
 
                 elif action == "S":
-                    print("→ スキップします（誤検出として記録）。")
+                    print("→ スキップします（誤検出として該当項目を除外）。")
+
+                    item = input("除外するチェックリスト項目名: ").strip()
+                    reason = input("除外理由（短く）: ").strip()
+
+                    if item:
+                        excluded_items.append(item)
+                        self.data_manager.record_excluded_item(
+                            paper_id=paper_id,
+                            checklist_item=item,
+                            reason=reason,
+                            example_case=f"phase3_iteration_{iteration}_issue{issue.issue_number}",
+                        )
 
                 elif action == "Q":
                     print("\n校正を中断します。")

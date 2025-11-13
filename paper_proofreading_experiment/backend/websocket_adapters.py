@@ -42,6 +42,7 @@ class WebSocketPhase1Adapter:
 
         # ユーザーアクション待ち用
         self.user_action = None
+        self.user_action_payload = None
         self.action_event = None
 
     async def run(
@@ -294,78 +295,93 @@ class WebSocketPhase1Adapter:
             new_excluded = []
 
             for issue in issues:
-                # 指摘を表示してアクションを待つ
-                action = await self.get_user_action_for_issue(
-                    websocket,
-                    issue,
-                    len(issues)
-                )
-
-                # 検出された指摘とユーザーアクションを記録
-                self.data_manager.record_detected_issue(
-                    session_id=phase1_id,
-                    paper_id=paper_id,
-                    phase="phase1",
-                    iteration=iteration,
-                    issue_number=issue.issue_number,
-                    total_issues=len(issues),
-                    before=issue.before,
-                    reasoning=issue.reasoning,
-                    after=issue.after,
-                    user_action=action,
-                )
-
-                # ユーザーアクションを記録
-                self.data_manager.record_user_action(
-                    session_id=phase1_id,
-                    paper_id=paper_id,
-                    phase="phase1",
-                    iteration=iteration,
-                    action_type="issue_judgment",
-                    action_value=action,
-                    context=f"issue_{issue.issue_number}/{len(issues)}",
-                )
-
-                if action == "M":
-                    # 手動修正
-                    await websocket.send_json({
-                        "type": "log",
-                        "message": f"指摘 {issue.issue_number}: 手動で修正してください",
-                        "level": "info"
-                    })
-                    detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
-
-                elif action == "S":
-                    # スキップ（該当項目を除外）
-                    await websocket.send_json({
-                        "type": "log",
-                        "message": f"指摘 {issue.issue_number}: スキップ（該当項目を除外）",
-                        "level": "info"
-                    })
-
-                    # チェックリスト項目を除外（簡略化のため固定値）
-                    item = f"item_issue_{issue.issue_number}"
-                    reason = "スキップ（誤検出）"
-
-                    new_excluded.append(item)
-                    excluded_items.append(item)
-
-                    self.data_manager.record_excluded_item(
-                        session_id=phase1_id,
-                        paper_id=paper_id,
-                        checklist_item=item,
-                        reason=reason,
-                        example_case=f"phase1_iteration_{iteration}_issue{issue.issue_number}",
+                while True:
+                    action, action_payload = await self.get_user_action_for_issue(
+                        websocket,
+                        issue,
+                        len(issues)
                     )
 
-                elif action == "Q":
-                    # 中断
+                    if action not in {"M", "S", "Q"}:
+                        await websocket.send_json({
+                            "type": "log",
+                            "message": "無効なアクションです。もう一度選択してください。",
+                            "level": "error"
+                        })
+                        continue
+
+                    self.data_manager.record_detected_issue(
+                        session_id=phase1_id,
+                        paper_id=paper_id,
+                        phase="phase1",
+                        iteration=iteration,
+                        issue_number=issue.issue_number,
+                        total_issues=len(issues),
+                        before=issue.before,
+                        reasoning=issue.reasoning,
+                        after=issue.after,
+                        user_action=action,
+                    )
+
+                    self.data_manager.record_user_action(
+                        session_id=phase1_id,
+                        paper_id=paper_id,
+                        phase="phase1",
+                        iteration=iteration,
+                        action_type="issue_judgment",
+                        action_value=action,
+                        context=f"issue_{issue.issue_number}/{len(issues)}",
+                    )
+
+                    if action == "M":
+                        await websocket.send_json({
+                            "type": "log",
+                            "message": f"指摘 {issue.issue_number}: 手動で修正してください",
+                            "level": "info"
+                        })
+                        detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
+                        break
+
+                    if action == "S":
+                        checklist_item = (action_payload or {}).get("checklist_item", "").strip()
+                        reason = (action_payload or {}).get("reason", "").strip() or "スキップ（誤検出）"
+
+                        if not checklist_item:
+                            await websocket.send_json({
+                                "type": "log",
+                                "message": "除外するチェックリスト項目名が入力されていません。もう一度入力してください。",
+                                "level": "error"
+                            })
+                            continue
+
+                        await websocket.send_json({
+                            "type": "log",
+                            "message": f"指摘 {issue.issue_number}: '{checklist_item}' を除外に追加しました",
+                            "level": "info"
+                        })
+
+                        new_excluded.append(checklist_item)
+                        excluded_items.append(checklist_item)
+
+                        self.data_manager.record_excluded_item(
+                            session_id=phase1_id,
+                            paper_id=paper_id,
+                            checklist_item=checklist_item,
+                            reason=reason,
+                            example_case=f"phase1_iteration_{iteration}_issue{issue.issue_number}",
+                        )
+                        break
+
+                    # action == "Q"
                     await websocket.send_json({
                         "type": "log",
                         "message": "クリーン化を中断します",
                         "level": "warning"
                     })
                     stopped_reason = "user_abort"
+                    break
+
+                if stopped_reason == "user_abort":
                     break
 
             # 中断判定
@@ -492,10 +508,9 @@ class WebSocketPhase1Adapter:
         websocket: WebSocket,
         issue: ProofreadingIssue,
         total_issues: int
-    ) -> str:
+    ) -> tuple[str, dict]:
         """指摘に対するユーザーアクションを取得"""
 
-        # 指摘を表示
         await websocket.send_json({
             "type": "issue_detected",
             "issue": {
@@ -507,14 +522,7 @@ class WebSocketPhase1Adapter:
             "total_issues": total_issues,
         })
 
-        # ユーザーアクションを待つ
-        self.action_event = asyncio.Event()
-        self.user_action = None
-
-        # ユーザーのアクションを待機（タイムアウトなし）
-        await self.action_event.wait()
-
-        return self.user_action
+        return await self._wait_for_user_action()
 
     async def wait_for_user_choice(
         self,
@@ -530,17 +538,24 @@ class WebSocketPhase1Adapter:
             "choices": choices,
         })
 
+        action, _ = await self._wait_for_user_action()
+        return action
+
+    async def _wait_for_user_action(self) -> tuple[str, dict]:
+        """ユーザーアクションが送られるまで待機"""
+
         self.action_event = asyncio.Event()
         self.user_action = None
+        self.user_action_payload = None
 
-        # ユーザーの選択を待機（タイムアウトなし）
         await self.action_event.wait()
 
-        return self.user_action
+        return self.user_action, self.user_action_payload or {}
 
-    def set_user_action(self, action: str):
+    def set_user_action(self, action: str, payload: Optional[Dict[str, Any]] = None):
         """ユーザーアクションを設定"""
         self.user_action = action
+        self.user_action_payload = payload
         if self.action_event:
             self.action_event.set()
 
@@ -811,75 +826,95 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
             new_excluded = []
 
             for issue in issues:
-                action = await self.get_user_action_for_issue(
-                    websocket,
-                    issue,
-                    len(issues)
-                )
-
-                # 検出された指摘とユーザーアクションを記録
-                self.data_manager.record_detected_issue(
-                    session_id=session_id,
-                    paper_id=paper_id,
-                    phase=phase,
-                    iteration=iteration,
-                    issue_number=issue.issue_number,
-                    total_issues=len(issues),
-                    before=issue.before,
-                    reasoning=issue.reasoning,
-                    after=issue.after,
-                    user_action=action,
-                )
-
-                # ユーザーアクションを記録
-                self.data_manager.record_user_action(
-                    session_id=session_id,
-                    paper_id=paper_id,
-                    phase=phase,
-                    iteration=iteration,
-                    action_type="issue_judgment",
-                    action_value=action,
-                    context=f"issue_{issue.issue_number}/{len(issues)}",
-                )
-
-                if action == "M":
-                    await websocket.send_json({
-                        "type": "log",
-                        "message": f"指摘 {issue.issue_number}: 手動で修正してください",
-                        "level": "info"
-                    })
-                    detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
-
-                elif action == "S":
-                    # スキップ（該当項目を除外）
-                    await websocket.send_json({
-                        "type": "log",
-                        "message": f"指摘 {issue.issue_number}: スキップ（該当項目を除外）",
-                        "level": "info"
-                    })
-
-                    # チェックリスト項目を除外（簡略化のため固定値）
-                    item = f"item_issue_{issue.issue_number}"
-                    reason = "スキップ（誤検出）"
-
-                    new_excluded.append(item)
-                    excluded_items.append(item)
-
-                    self.data_manager.record_excluded_item(
-                        session_id=session_id,
-                        paper_id=paper_id,
-                        checklist_item=item,
-                        reason=reason,
-                        example_case=f"{phase}_iteration_{iteration}_issue{issue.issue_number}",
+                while True:
+                    action, action_payload = await self.get_user_action_for_issue(
+                        websocket,
+                        issue,
+                        len(issues)
                     )
 
-                elif action == "Q":
+                    if action not in {"A", "M", "S", "Q"}:
+                        await websocket.send_json({
+                            "type": "log",
+                            "message": "無効なアクションです。もう一度選択してください。",
+                            "level": "error"
+                        })
+                        continue
+
+                    self.data_manager.record_detected_issue(
+                        session_id=session_id,
+                        paper_id=paper_id,
+                        phase=phase,
+                        iteration=iteration,
+                        issue_number=issue.issue_number,
+                        total_issues=len(issues),
+                        before=issue.before,
+                        reasoning=issue.reasoning,
+                        after=issue.after,
+                        user_action=action,
+                    )
+
+                    self.data_manager.record_user_action(
+                        session_id=session_id,
+                        paper_id=paper_id,
+                        phase=phase,
+                        iteration=iteration,
+                        action_type="issue_judgment",
+                        action_value=action,
+                        context=f"issue_{issue.issue_number}/{len(issues)}",
+                    )
+
+                    if action in {"A", "M"}:
+                        await websocket.send_json({
+                            "type": "log",
+                            "message": f"指摘 {issue.issue_number}: {'承認' if action == 'A' else '手動修正'}を選択",
+                            "level": "info"
+                        })
+                        detected_in_iteration.append(
+                            f"issue_{issue.issue_number}_{'accepted' if action == 'A' else 'manual'}"
+                        )
+                        break
+
+                    if action == "S":
+                        checklist_item = (action_payload or {}).get("checklist_item", "").strip()
+                        reason = (action_payload or {}).get("reason", "").strip() or "スキップ（誤検出）"
+
+                        if not checklist_item:
+                            await websocket.send_json({
+                                "type": "log",
+                                "message": "除外するチェックリスト項目名が入力されていません。もう一度入力してください。",
+                                "level": "error"
+                            })
+                            continue
+
+                        await websocket.send_json({
+                            "type": "log",
+                            "message": f"指摘 {issue.issue_number}: '{checklist_item}' を除外に追加しました",
+                            "level": "info"
+                        })
+
+                        new_excluded.append(checklist_item)
+                        excluded_items.append(checklist_item)
+
+                        self.data_manager.record_excluded_item(
+                            session_id=session_id,
+                            paper_id=paper_id,
+                            checklist_item=checklist_item,
+                            reason=reason,
+                            example_case=f"{phase}_iteration_{iteration}_issue{issue.issue_number}",
+                        )
+                        break
+
+                    # action == "Q"
                     await websocket.send_json({
                         "type": "log",
                         "message": "校正を中断します",
                         "level": "warning"
                     })
                     stopped_reason = "user_abort"
+                    break
+
+                if stopped_reason == "user_abort":
                     break
 
             # 中断判定

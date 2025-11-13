@@ -12,8 +12,11 @@ interface IssueCardProps {
 }
 
 export default function IssueCard({ wsManager }: IssueCardProps) {
-  const { currentIssue, currentPhase, isRunning } = useAppStore();
+  const { currentIssue, currentPhase, isRunning, setCurrentIssue } = useAppStore();
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showSkipForm, setShowSkipForm] = useState(false);
+  const [skipItem, setSkipItem] = useState('');
+  const [skipReason, setSkipReason] = useState('');
 
   // デバッグ用ログ
   console.log('[IssueCard] 状態:', {
@@ -54,8 +57,43 @@ export default function IssueCard({ wsManager }: IssueCardProps) {
       return;
     }
 
+    if (action === 'S') {
+      setShowSkipForm(true);
+      return;
+    }
+
     wsManager.sendAction(action);
     toast.success(`${label}を選択しました`);
+    setCurrentIssue(null);
+  };
+
+  const handleSkipSubmit = () => {
+    if (!wsManager) {
+      toast.error('WebSocket接続がありません');
+      return;
+    }
+
+    if (!skipItem.trim()) {
+      toast.error('チェックリスト項目名を入力してください');
+      return;
+    }
+
+    wsManager.sendAction('S', {
+      checklist_item: skipItem.trim(),
+      reason: skipReason.trim(),
+    });
+
+    toast.success(`除外項目を送信: ${skipItem.trim()}`);
+    setCurrentIssue(null);
+    setShowSkipForm(false);
+    setSkipItem('');
+    setSkipReason('');
+  };
+
+  const handleSkipCancel = () => {
+    setShowSkipForm(false);
+    setSkipItem('');
+    setSkipReason('');
   };
 
   const CopyButton = ({ text, field }: { text: string; field: string }) => {
@@ -177,6 +215,50 @@ export default function IssueCard({ wsManager }: IssueCardProps) {
           <p className="text-xs text-gray-600 mt-3">
             ※ 承認: 正しい指摘として記録 | スキップ: 誤検出として該当項目を除外 | 中断: フェーズを終了
           </p>
+        </div>
+      )}
+
+      {showSkipForm && (
+        <div className="mt-4 p-4 border border-yellow-300 bg-white rounded-lg">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">除外するチェックリスト項目を入力</h3>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                チェックリスト項目名 <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
+                placeholder="例: 1.3 図表の書式"
+                value={skipItem}
+                onChange={(e) => setSkipItem(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">除外理由</label>
+              <textarea
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400"
+                rows={3}
+                placeholder="誤検出である理由を簡潔に記入"
+                value={skipReason}
+                onChange={(e) => setSkipReason(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex flex-col sm:flex-row gap-2">
+            <button
+              onClick={handleSkipSubmit}
+              className="flex-1 inline-flex items-center justify-center px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700"
+            >
+              <CheckCircle className="w-4 h-4 mr-2" /> 除外を記録
+            </button>
+            <button
+              onClick={handleSkipCancel}
+              className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            >
+              キャンセル
+            </button>
+          </div>
         </div>
       )}
     </div>
