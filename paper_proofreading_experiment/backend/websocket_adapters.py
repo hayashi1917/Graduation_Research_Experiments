@@ -440,15 +440,12 @@ class WebSocketPhase1Adapter:
             )
 
             # 次のイテレーションに進む前に、手動修正を確認
-            # Note: TeXファイルは同じパスなので、ユーザーが手動編集した内容が自動的に反映される
+            # Note: PDFファイルは直接編集できないため、手動修正は別途実施が必要
             await websocket.send_json({
                 "type": "log",
-                "message": "手動修正がある場合は、TeXファイルを編集してから次のイテレーションに進んでください",
+                "message": "手動修正がある場合は、PDFファイルを更新してから次のイテレーションに進んでください",
                 "level": "info"
             })
-
-            # TODO: 必要に応じてPDF再生成を実装
-            # self.paper_manager.compile_tex_to_pdf(tex_path, pdf_path)
 
         # Phase1セッション情報を更新
         from datetime import datetime
@@ -572,7 +569,6 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
         result = await self._run_internal(
             paper_id=paper_id,
             pdf_path=pdf_path,
-            tex_path=tex_path,
             websocket=websocket,
             phase="phase3"
         )
@@ -589,7 +585,6 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
         self,
         paper_id: str,
         pdf_path: Path,
-        tex_path: Path,
         websocket: WebSocket,
         phase: str,
     ) -> Dict[str, Any]:
@@ -1063,7 +1058,6 @@ class WebSocketPhase2Adapter:
             response = self.llm_client.call(
                 prompt=prompt,
                 pdf_path=pdf_path,
-                tex_path=tex_path,
             )
         except Exception as e:
             llm_success = False

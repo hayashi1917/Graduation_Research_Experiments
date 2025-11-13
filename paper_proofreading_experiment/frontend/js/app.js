@@ -115,8 +115,7 @@ function displayPapers(papers) {
     papersList.innerHTML = papers.map(paper => `
         <div class="paper-item" data-paper-id="${paper.id}">
             <div class="fw-bold">${paper.id}</div>
-            <small>PDF: ${paper.pdf}</small><br>
-            <small>TeX: ${paper.tex}</small>
+            <small>PDF: ${paper.pdf}</small>
         </div>
     `).join('');
 
