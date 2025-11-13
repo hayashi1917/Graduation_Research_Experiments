@@ -1,451 +1,240 @@
-# 学術論文形式校正実験プログラム
+# 論文校正実験システム
 
-LLMによる学術論文の形式的校正の可能性を検証する実験の半自動化プログラムです。
+学術論文の校正実験を行うためのWebベースシステムです。LLMを活用して、論文のクリーン化、誤り埋め込み、校正の3つのフェーズを実行します。
 
-## 概要
+## 📋 目次
 
-このプログラムは、以下の3つのフェーズから構成される実験を半自動化します：
+- [システム概要](#システム概要)
+- [機能](#機能)
+- [アーキテクチャ](#アーキテクチャ)
+- [環境構築](#環境構築)
+- [使い方](#使い方)
+- [API仕様](#api仕様)
+- [トラブルシューティング](#トラブルシューティング)
 
-1. **フェーズ1: クリーン化** - 論文をLLMが「指摘事項なし」と判断する状態にする
-2. **フェーズ2: 誤り埋め込み** - チェックリストに基づいて意図的な誤りを埋め込む
-3. **フェーズ3: 校正実験** - 誤りを反復的に検出・修正し、検出率を測定
+## システム概要
 
-## プロジェクト構造
+このシステムは、学術論文の校正精度を測定するための実験環境を提供します。
+
+### 3つのフェーズ
+
+1. **Phase1: クリーン化**
+   - LLMを使用して論文の誤りを検出・修正
+   - イテレーティブな校正プロセス
+   - 手動修正のサポート
+   - 各Phase1実行に固有のIDを付与
+
+2. **Phase2: 誤り埋め込み**
+   - クリーン化された論文に意図的に誤りを埋め込む
+   - チェックリストに基づいた誤り生成
+
+3. **Phase3: 校正**
+   - 埋め込まれた誤りを検出
+   - 検出率を測定・評価
+
+## 機能
+
+### ✨ 主要機能
+
+- **Phase1セッション管理**: 各Phase1実行に固有のIDを付与し、履歴を保存
+- **手動修正ワークフロー**: イテレーション間でTeXファイルを手動編集可能
+- **コピーボタン**: 修正前/後の文を1クリックでクリップボードにコピー
+- **データリセット**: 実験データを選択的に削除
+- **WebSocket通信**: リアルタイムな進捗表示
+- **CSV/JSON出力**: 実験結果の詳細なログ
+
+### 🔧 対応LLM
+
+- Google Gemini (gemini-1.5-pro など)
+- Anthropic Claude (claude-3-opus など)
+
+## アーキテクチャ
+
+### バックエンド (Python/FastAPI)
 
 ```
-paper_proofreading_experiment/
-├── config/
-│   ├── prompts.yaml          # プロンプトテンプレート
-│   ├── checklist.md          # チェックリスト
-│   └── settings.yaml         # 実験設定
-├── data/
-│   ├── papers/               # 論文データ（PDF + TeX）
-│   │   ├── paper001/
-│   │   │   ├── paper001.pdf
-│   │   │   └── paper001.tex
-│   │   └── paper002/
-│   │       ├── paper002.pdf
-│   │       └── paper002.tex
-│   ├── results/              # 実験結果（CSV）
-│   │   ├── embedded_errors.csv
-│   │   ├── iteration_log.csv
-│   │   ├── excluded_items.csv
-│   │   └── summary.csv
-│   ├── logs/                 # LLM応答・プロンプトログ
-│   │   └── paper001/
-│   │       ├── phase1_iteration_1_prompt.txt
-│   │       ├── phase1_iteration_1_response.txt
-│   │       ├── phase2_iteration_1_response.txt
-│   │       └── phase3_iteration_1_response.txt
-│   └── versions/             # 論文のバージョン履歴
-│       └── paper001/
-│           ├── phase1_iter1_20250107_120000/
-│           │   ├── paper001.pdf
-│           │   └── paper001.tex
-│           └── phase3_iter1_20250107_130000/
-│               ├── paper001.pdf
-│               └── paper001.tex
-├── backend/                  # Web UI バックエンド
-│   ├── api.py                # FastAPI メインファイル
-│   └── requirements.txt      # API用依存パッケージ
-├── frontend/                 # Web UI フロントエンド
-│   ├── index.html            # メインページ
-│   ├── css/
-│   │   └── style.css         # カスタムスタイル
-│   └── js/
-│       ├── app.js            # アプリケーションロジック
-│       ├── api.js            # API通信
-│       └── websocket.js      # WebSocket処理
-├── src/
-│   ├── llm_client.py         # LLM API呼び出し
-│   ├── response_parser.py    # LLM応答のパース
-│   ├── paper_manager.py      # 論文のバージョン管理・編集
-│   ├── data_manager.py       # データ記録・管理
-│   ├── phase1_cleaner.py     # フェーズ1: クリーン化
-│   ├── phase2_embedder.py    # フェーズ2: 誤り埋め込み
-│   ├── phase3_proofreader.py # フェーズ3: 校正実験
-│   └── main.py               # メインプログラム（CLI）
-├── run_server.py             # Webサーバー起動スクリプト
-├── requirements.txt          # CLI用依存パッケージ
-└── README.md
+backend/
+├── core/              # 設定と依存性注入
+│   ├── config.py      # アプリケーション設定
+│   └── dependencies.py # 依存性注入
+├── models/            # Pydanticモデル
+│   ├── requests.py    # リクエストモデル
+│   └── responses.py   # レスポンスモデル
+├── routers/           # APIルーター
+│   ├── papers.py      # 論文管理
+│   └── data.py        # データ管理
+├── api.py             # WebSocket通信
+└── main.py            # FastAPIアプリケーション
 ```
 
-## セットアップ
+### フロントエンド
 
-### 1. 仮想環境の作成（推奨）
+- **現在**: HTML/CSS/JavaScript (Bootstrap 5)
+- **次期**: Next.js 14 (App Router) + TypeScript + Tailwind CSS
 
-macOSやHomebrew Python環境では、システムのPython環境を保護するため、仮想環境の使用が推奨されます。
+## 環境構築
+
+### 必要な環境
+
+- **Python**: 3.10以上
+- **Node.js**: 18.0以上（Next.jsフロントエンド用、将来）
+- **LaTeX**: pdflatex（論文コンパイル用、オプション）
+
+### 1. リポジトリのクローン
 
 ```bash
-# プロジェクトディレクトリに移動
-cd paper_proofreading_experiment
+git clone <repository-url>
+cd Graduation_Research_Experiments/paper_proofreading_experiment
+```
 
-# 仮想環境を作成
-python3 -m venv venv
+### 2. Python環境のセットアップ
 
-# 仮想環境を有効化
+#### 仮想環境の作成
+
+```bash
+python -m venv venv
+
+# macOS/Linux
 source venv/bin/activate
 
-# 仮想環境が有効化されると、プロンプトに (venv) が表示されます
+# Windows
+venv\Scripts\activate
 ```
 
-**注意**: 仮想環境を使用しない場合、macOSでは以下のエラーが発生することがあります：
-```
-error: externally-managed-environment
-```
-
-### 2. 依存パッケージのインストール
-
-仮想環境を有効化した状態で、依存パッケージをインストールします：
+#### 依存パッケージのインストール
 
 ```bash
+# バックエンドの依存関係
+pip install -r backend/requirements.txt
+
+# srcの依存関係
 pip install -r requirements.txt
 ```
 
-### 3. APIキーの設定
+### 3. 環境変数の設定
 
-環境変数としてAPIキーを設定してください：
-
-```bash
-export GEMINI_API_KEY="your_gemini_api_key_here"
-export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
-```
-
-または、`.env`ファイルに記載：
-
-```
-GEMINI_API_KEY=your_gemini_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-```
-
-### 4. 論文ファイルの配置
-
-`data/papers/` 配下に論文IDごとのディレクトリを作成し、PDFとTeXファイルを配置してください：
-
-```
-data/papers/
-├── paper001/
-│   ├── paper001.pdf
-│   └── paper001.tex
-├── paper002/
-│   ├── paper002.pdf
-│   └── paper002.tex
-...
-```
-
-### 5. チェックリストの準備
-
-`config/checklist.md` に実験で使用するチェックリストを記載してください。
-
-サンプルが既に用意されていますが、実験では「後藤版 英語論文自己チェックリスト」など、実際のチェックリストに置き換えてください。
-
-## 使用方法
-
-このプログラムには2つの実行方法があります：
-
-### 方法1: Web UI（推奨）
-
-ブラウザベースのインターフェースで直感的に操作できます。
-
-#### 1. Webサーバーの起動
+`.env`ファイルをプロジェクトルートに作成：
 
 ```bash
-# プロジェクトディレクトリに移動
-cd paper_proofreading_experiment
+# Google Gemini API
+GOOGLE_API_KEY=your_gemini_api_key_here
 
-# 仮想環境を有効化
-source venv/bin/activate
-
-# Web UI用の依存パッケージをインストール（初回のみ）
-pip install -r backend/requirements.txt
-
-# Webサーバーを起動
-python run_server.py
+# Anthropic Claude API
+ANTHROPIC_API_KEY=your_claude_api_key_here
 ```
 
-#### 2. ブラウザでアクセス
+### 4. 設定ファイルの確認
 
-ブラウザで以下のURLを開きます：
-
-```
-http://localhost:8000
-```
-
-#### 3. Web UIの使い方
-
-1. **論文のアップロード**
-   - 「論文をアップロード」ボタンをクリック
-   - 論文ID、PDFファイル、TeXファイルを選択してアップロード
-
-2. **論文の選択**
-   - 左サイドバーの論文リストから実験対象の論文を選択
-
-3. **フェーズの実行**
-   - フェーズボタン（フェーズ1、2、3）をクリックして実行
-   - リアルタイムでログと進捗が表示されます
-
-4. **指摘の判断**
-   - 指摘が検出されると自動的に表示されます
-   - ボタンまたはキーボード（A/M/S/D/Q）で判断を入力
-
-5. **履歴の確認**
-   - 画面下部でイテレーション履歴を確認できます
-
-**Web UIの利点:**
-- リアルタイムで進捗を確認できる
-- 直感的なUIで操作が簡単
-- 複数のブラウザタブで同時に作業可能
-- イテレーション履歴を視覚的に確認
-- WebSocketによる双方向通信でスムーズな操作
-- キーボードショートカット対応（A/M/S/D/Q）
-
-**Web UIの主な機能:**
-- ✅ 論文のアップロード（PDF + TeX）
-- ✅ フェーズ1/2/3の完全実装
-- ✅ リアルタイム進捗表示とログ出力
-- ✅ 指摘の詳細表示と判断UI
-- ✅ イテレーション履歴の可視化
-- ✅ 設定の編集（LLMモデル変更）
-- ✅ 自動/手動修正の選択
-- ✅ 除外項目の管理
-
-**技術スタック:**
-- バックエンド: FastAPI + WebSocket
-- フロントエンド: Vanilla JavaScript + Bootstrap 5
-- 通信: REST API + WebSocket（リアルタイム）
-
-### 方法2: コマンドライン（従来型）
-
-**重要**: プログラムを実行する前に、必ず仮想環境を有効化してください。
-
-```bash
-# プロジェクトディレクトリに移動
-cd paper_proofreading_experiment
-
-# 仮想環境を有効化（毎回必要）
-source venv/bin/activate
-```
-
-### フェーズ1: クリーン化
-
-論文をクリーンな状態にします（LLMが「指摘事項なし」と判断するまで反復）。
-
-```bash
-cd src
-python main.py --paper-id paper001 --phase 1
-```
-
-**プロセス:**
-1. 各イテレーションの開始時に論文のバージョンを自動保存
-2. LLMに校正を依頼（プロンプトと応答を自動記録）
-3. LLMの応答から指摘を自動抽出・表示
-4. 各指摘について判断:
-   - **[A] 自動適用**: 正しい指摘なので自動的にTeXファイルに反映
-   - **[M] 手動**: 手動で修正
-   - **[S] スキップ**: 誤検出
-   - **[D] 判断困難**: 内容理解が必要（該当項目を除外）
-   - **[Q] 中断**: クリーン化を中断
-5. 「指摘事項はありません」が出るまで繰り返す
-
-**重要:**
-- 判断困難として除外した項目は、フェーズ2以降でもチェック対象から除外されます
-- 各イテレーションの論文ファイルは `data/versions/` に保存されます
-- プロンプトと応答は `data/logs/` に保存されます
-
-### フェーズ2: 誤り埋め込み
-
-チェックリストに基づいて意図的な誤りを埋め込みます。
-
-```bash
-cd src
-python main.py --paper-id paper001 --phase 2
-```
-
-**プロセス:**
-1. LLMに誤り埋め込みを依頼（10件）
-2. 埋め込まれた誤りのリストを確認
-3. 手動で論文（TeXファイル）に誤りを反映
-
-**重要:** フェーズ2の後、必ず手動で論文ファイルを更新してください。
-
-### フェーズ3: 校正実験
-
-誤りが埋め込まれた論文を反復的に校正します。
-
-```bash
-cd src
-python main.py --paper-id paper001 --phase 3
-```
-
-**プロセス:**
-1. 各イテレーションの開始時に論文のバージョンを自動保存
-2. LLMに校正を依頼（プロンプトと応答を自動記録）
-3. LLMの応答から指摘を自動抽出・表示
-4. 各指摘について判断:
-   - **[A] 自動適用**: 正しい指摘なので自動的にTeXファイルに反映
-   - **[M] 手動**: 手動で修正
-   - **[S] スキップ**: 誤検出
-   - **[D] 判断困難**: 内容理解が必要（該当項目を除外）
-   - **[Q] 中断**: 校正を中断
-5. 「指摘事項はありません」が出るまで繰り返す（最大10回）
-
-**重要:**
-- 各イテレーションの論文ファイルは `data/versions/` に保存されます
-- プロンプトと応答は `data/logs/` に保存されます
-- 検出された誤りは自動的に記録され、検出率が計算されます
-
-## 実験データの記録
-
-実験データは自動的に `data/results/` に記録されます：
-
-### 1. embedded_errors.csv
-
-埋め込まれた誤りのリスト
-
-| カラム | 説明 |
-|--------|------|
-| paper_id | 論文ID |
-| error_id | 誤りID |
-| checklist_item | チェックリスト項目 |
-| category | カテゴリ |
-| before | 修正前の文 |
-| after | 修正後の文（誤りを含む） |
-| location | 該当箇所 |
-| timestamp | タイムスタンプ |
-
-### 2. iteration_log.csv
-
-各イテレーションのログ
-
-| カラム | 説明 |
-|--------|------|
-| paper_id | 論文ID |
-| phase | フェーズ |
-| iteration | イテレーション番号 |
-| timestamp | タイムスタンプ |
-| llm_model | 使用したLLMモデル |
-| detected_errors | 検出された誤りのリスト（JSON） |
-| new_issues_count | 新規検出数 |
-| excluded_items | 除外項目リスト（JSON） |
-| stopped_reason | 停止理由 |
-
-### 3. excluded_items.csv
-
-除外されたチェックリスト項目
-
-| カラム | 説明 |
-|--------|------|
-| paper_id | 論文ID |
-| checklist_item | チェックリスト項目 |
-| reason | 除外理由 |
-| timestamp | タイムスタンプ |
-| example_case | 具体例 |
-
-### 4. summary.csv
-
-実験のサマリー
-
-| カラム | 説明 |
-|--------|------|
-| paper_id | 論文ID |
-| total_embedded | 埋め込んだ誤り総数 |
-| total_detected | 検出された誤り総数 |
-| detection_rate | 検出率（%） |
-| phase1_iterations | フェーズ1の反復回数 |
-| phase3_iterations | フェーズ3の反復回数 |
-| excluded_items_count | 除外項目数 |
-| completion_time | 完了時間 |
-
-## 設定のカスタマイズ
-
-### config/settings.yaml
-
-実験パラメータやLLM設定を変更できます：
+`config/settings.yaml`でLLMプロバイダーとモデルを設定：
 
 ```yaml
 llm:
-  proofreading:
-    provider: "gemini"
-    model: "gemini-1.5-pro"
-    temperature: 0.0
-    api_key_env: "GEMINI_API_KEY"
-
-  embedding:
-    provider: "claude"
-    model: "claude-3-5-sonnet-20241022"
-    temperature: 0.0
-    api_key_env: "ANTHROPIC_API_KEY"
-
-experiment:
-  num_errors: 10              # 埋め込む誤りの数
-  max_errors_per_item: 2      # 同一項目からの最大選出数
-  max_iterations: 10          # 最大反復回数
-  num_papers: 10              # 論文の総数
+  provider: "gemini"  # or "claude"
+  model: "gemini-1.5-pro"  # or "claude-3-opus-20240229"
 ```
 
-### config/prompts.yaml
+### 5. サーバーの起動
 
-プロンプトテンプレートをカスタマイズできます。
+```bash
+# バックエンドサーバーを起動
+cd backend
+python -m uvicorn api:app --reload --host 0.0.0.0 --port 8000
+```
 
-### config/checklist.md
+サーバーが起動したら、ブラウザで以下にアクセス：
 
-実験で使用するチェックリストを記載してください。
+- **Web UI**: http://localhost:8000
+- **API ドキュメント**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/health
+
+## 使い方
+
+### 1. 論文のアップロード
+
+1. Web UIの「論文をアップロード」ボタンをクリック
+2. 論文ID、PDFファイル、TeXファイルを選択
+3. アップロードを実行
+
+### 2. Phase1: クリーン化の実行
+
+1. 論文リストから論文を選択
+2. 「Phase1: クリーン化」ボタンをクリック
+3. LLMからの指摘を確認
+4. 各指摘に対してアクションを選択：
+   - **[M] 手動修正**: TeXファイルを手動で編集
+   - **[S] スキップ**: 誤検出として記録
+   - **[D] 判断困難**: 除外リストに追加
+   - **[Q] 中断**: 処理を中断
+5. 「次のイテレーションに進みますか？」で **Y** を選択
+6. 手動でTeXファイルを編集（必要に応じて）
+7. 次のイテレーションが開始される
+
+**重要**: 「次のイテレーションに進みますか？」のダイアログが表示されている間に、TeXファイルを編集できます。Yを選択すると、編集内容が次のイテレーションに反映されます。
+
+### 3. データのリセット
+
+不要なデータを削除する場合：
+
+1. Navbarの「リセット」ボタンをクリック
+2. 削除する項目を選択：
+   - 実験結果データ (CSV, JSON)
+   - 論文バージョン履歴
+   - 進捗情報
+3. 「データを削除」で確定
+
+## API仕様
+
+### RESTful API
+
+#### 論文管理
+
+- `GET /api/papers/` - 論文リストを取得
+- `POST /api/papers/upload` - 論文をアップロード
+- `GET /api/papers/{paper_id}/info` - 論文情報を取得
+
+#### データ管理
+
+- `POST /api/data/reset` - データをリセット
+- `GET /api/data/phase1_sessions/{paper_id}` - Phase1セッション履歴を取得
+- `GET /api/data/iterations/{paper_id}` - イテレーション履歴を取得
+- `GET /api/data/detection_rate/{paper_id}` - 検出率を取得
+
+### WebSocket API
+
+- `/ws/{client_id}` - WebSocket接続
+- `/ws/{client_id}/action` - ユーザーアクション送信
 
 ## トラブルシューティング
 
-### パッケージインストールエラー（macOS）
+### LLM APIエラー
 
-```
-error: externally-managed-environment
-```
+**エラー**: `API key not found`
 
-→ 仮想環境を使用してください（上記「仮想環境の作成」参照）
+**解決方法**: `.env`ファイルに正しいAPIキーが設定されているか確認してください。
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+### JSON Parse Error
 
-### APIキーエラー
+**エラー**: `JSONDecodeError: Expecting value: line 1 column 1 (char 0)`
 
-```
-ValueError: 環境変数 GEMINI_API_KEY が設定されていません。
-```
+**解決方法**: 空または破損した進捗ファイルが原因です。リセットボタンで進捗情報を削除してください。
 
-→ 環境変数を設定してください（上記「APIキーの設定」参照）
+## 開発ロードマップ
 
-### 論文ファイルが見つからない
+### 実装済み
 
-```
-エラー: 論文ファイルが見つかりません。
-```
+- ✅ Phase1セッション管理システム
+- ✅ 手動修正ワークフロー
+- ✅ コピーボタン
+- ✅ データリセット機能
+- ✅ バックエンドのモジュール化
+- ✅ Pydanticによる型安全性
 
-→ `data/papers/{paper_id}/` ディレクトリに論文ファイルを配置してください
+### 近日実装予定
 
-### LLMの応答が期待通りでない
-
-- プロンプトを確認・調整してください（`config/prompts.yaml`）
-- LLMのtemperatureを調整してください（`config/settings.yaml`）
-
-## 注意事項
-
-1. **手動操作が必要な箇所**
-   - フェーズ1: LLMの指摘に基づく論文の修正
-   - フェーズ2: 埋め込まれた誤りを論文に反映
-   - フェーズ3: 各指摘の判断と修正
-
-2. **データのバックアップ**
-   - 実験前に論文ファイルのバックアップを取ることを推奨します
-
-3. **API利用料金**
-   - LLM APIの利用には料金が発生します
-   - 大量の論文を処理する場合は特に注意してください
+- 🚧 Next.jsフロントエンド（TypeScript + Tailwind CSS）
+- 🚧 Phase1選択ドロップダウンUI
+- 🚧 sessions.jsonからphase1_sessions.jsonへの完全移行
 
 ## ライセンス
 
-このプログラムは卒業研究の一環として作成されました。
-
-## 問い合わせ
-
-不明な点があれば、開発者に問い合わせてください。
+MIT License
