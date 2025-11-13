@@ -41,6 +41,32 @@ class DataManager:
         # CSVファイルを初期化
         self._initialize_csv_files()
 
+    def _safe_load_json(self, file_path: Path, default: Any = None) -> Any:
+        """
+        JSONファイルを安全に読み込む
+
+        Args:
+            file_path: 読み込むJSONファイルのパス
+            default: ファイルが存在しない、空、または破損している場合のデフォルト値
+
+        Returns:
+            パースされたJSONデータ、またはデフォルト値
+        """
+        if not file_path.exists():
+            return default if default is not None else {}
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+                if not content:
+                    # ファイルが空の場合
+                    return default if default is not None else {}
+                return json.loads(content)
+        except (json.JSONDecodeError, Exception) as e:
+            # JSONパースエラーまたはその他のエラー
+            print(f"Warning: Failed to load JSON from {file_path}: {e}")
+            return default if default is not None else {}
+
     def _initialize_csv_files(self):
         """CSVファイルを初期化（ヘッダー行を作成）"""
 
@@ -608,10 +634,7 @@ class DataManager:
     ):
         """進捗情報を保存"""
         # 既存の進捗データを読み込む
-        progress_data = {}
-        if self.progress_file.exists():
-            with open(self.progress_file, "r", encoding="utf-8") as f:
-                progress_data = json.load(f)
+        progress_data = self._safe_load_json(self.progress_file, default={})
 
         # 論文IDのエントリがなければ作成
         if paper_id not in progress_data:
@@ -640,11 +663,7 @@ class DataManager:
             (session_id, iteration, excluded_items): セッションID、次に開始すべきイテレーション番号と除外項目リスト
                                                     進捗がない場合は ("", 0, [])
         """
-        if not self.progress_file.exists():
-            return ("", 0, [])
-
-        with open(self.progress_file, "r", encoding="utf-8") as f:
-            progress_data = json.load(f)
+        progress_data = self._safe_load_json(self.progress_file, default={})
 
         # 進捗情報を取得
         if paper_id in progress_data and phase in progress_data[paper_id]:
@@ -658,11 +677,7 @@ class DataManager:
 
     def clear_progress(self, paper_id: str, phase: str):
         """進捗情報をクリア（フェーズ完了時）"""
-        if not self.progress_file.exists():
-            return
-
-        with open(self.progress_file, "r", encoding="utf-8") as f:
-            progress_data = json.load(f)
+        progress_data = self._safe_load_json(self.progress_file, default={})
 
         # 該当のフェーズ進捗を削除
         if paper_id in progress_data and phase in progress_data[paper_id]:
@@ -690,10 +705,7 @@ class DataManager:
         phase3_end: str = "",
     ):
         """セッションメタデータを保存"""
-        sessions_data = {}
-        if self.sessions_file.exists():
-            with open(self.sessions_file, "r", encoding="utf-8") as f:
-                sessions_data = json.load(f)
+        sessions_data = self._safe_load_json(self.sessions_file, default={})
 
         if session_id not in sessions_data:
             sessions_data[session_id] = {}
@@ -731,11 +743,7 @@ class DataManager:
 
     def get_latest_session_id(self, paper_id: str) -> str:
         """指定された論文の最新セッションIDを取得"""
-        if not self.sessions_file.exists():
-            return ""
-
-        with open(self.sessions_file, "r", encoding="utf-8") as f:
-            sessions_data = json.load(f)
+        sessions_data = self._safe_load_json(self.sessions_file, default={})
 
         # 最新のセッションIDを見つける
         latest_session_id = ""
