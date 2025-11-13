@@ -156,7 +156,6 @@ class Phase1Cleaner:
             self.parser.display_issues(issues)
 
             print("\n各指摘について判断してください:")
-            print("  [A] 適用: 正しい指摘なので反映（自動適用）")
             print("  [M] 手動: 手動で修正")
             print("  [S] スキップ: 誤検出として該当項目を除外")
             print("  [Q] 中断: クリーン化を中断")
@@ -173,28 +172,9 @@ class Phase1Cleaner:
                 print(f"修正後: {issue.after[:100]}...")
                 print(f"{'='*60}")
 
-                action = input("\n[A]自動適用 / [M]手動 / [S]スキップ / [Q]中断: ").strip().upper()
+                action = input("\n[M]手動 / [S]スキップ / [Q]中断: ").strip().upper()
 
-                if action == "A":
-                    print("→ 自動適用します...")
-
-                    # TeXファイルに修正を適用
-                    success = self.paper_manager.apply_correction(
-                        tex_path=tex_path,
-                        before_text=issue.before,
-                        after_text=issue.after,
-                        backup=True,
-                    )
-
-                    if success:
-                        detected_in_iteration.append(f"issue_{issue.issue_number}_auto")
-                        print("✓ 修正を適用しました")
-                    else:
-                        print("⚠ 自動適用に失敗しました。手動で修正してください。")
-                        input("修正完了後、Enter キーを押してください...")
-                        detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
-
-                elif action == "M":
+                if action == "M":
                     print("→ 手動で修正してください。")
                     print(f"\n修正前: {issue.before}")
                     print(f"修正後: {issue.after}")

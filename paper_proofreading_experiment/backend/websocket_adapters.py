@@ -311,7 +311,7 @@ class WebSocketPhase1Adapter:
                     context=f"issue_{issue.issue_number}/{len(issues)}",
                 )
 
-                if action == "A" or action == "M":
+                if action == "M":
                     # 手動修正
                     await websocket.send_json({
                         "type": "log",
@@ -790,36 +790,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                     context=f"issue_{issue.issue_number}/{len(issues)}",
                 )
 
-                if action == "A":
-                    await websocket.send_json({
-                        "type": "log",
-                        "message": f"指摘 {issue.issue_number}: 自動適用します",
-                        "level": "info"
-                    })
-
-                    success = self.paper_manager.apply_correction(
-                        tex_path=tex_path,
-                        before_text=issue.before,
-                        after_text=issue.after,
-                        backup=True,
-                    )
-
-                    if success:
-                        detected_in_iteration.append(f"issue_{issue.issue_number}_auto")
-                        await websocket.send_json({
-                            "type": "log",
-                            "message": "修正を適用しました",
-                            "level": "success"
-                        })
-                    else:
-                        detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
-                        await websocket.send_json({
-                            "type": "log",
-                            "message": "自動適用に失敗しました",
-                            "level": "warning"
-                        })
-
-                elif action == "M":
+                if action == "M":
                     await websocket.send_json({
                         "type": "log",
                         "message": f"指摘 {issue.issue_number}: 手動で修正してください",
