@@ -95,9 +95,81 @@ class ResponseParser:
         for pattern in json_patterns:
             match = re.search(pattern, response, re.DOTALL)
             if match:
-                json_str = match.group(1)
-                data = self._loads_json_lenient(json_str)
-                if data is None:
+                try:
+                    json_str = match.group(1)
+                    data = json.loads(json_str)
+
+                    # データがリストの場合
+                    if isinstance(data, list):
+                        issues = []
+                        for i, item in enumerate(data, 1):
+                            # issue_numberがない場合は追加
+                            if 'issue_number' not in item:
+                                item['issue_number'] = i
+                            try:
+                                issues.append(ProofreadingIssue(**item))
+                            except Exception:
+                                continue
+                        return ProofreadingParseResult(
+                            issues=issues,
+                            no_issues=len(issues) == 0,
+                        )
+
+                    # データが辞書の場合
+                    elif isinstance(data, dict):
+                        # Pydanticモデルを使ってパース
+                        try:
+                            # no_issuesフラグがある場合
+                            if 'no_issues' in data:
+                                if data['no_issues'] is True:
+                                    # 修正点なし
+                                    return ProofreadingParseResult(issues=[], no_issues=True)
+                                # no_issues: false の場合、issuesを処理
+                                elif 'issues' in data:
+                                    issues = []
+                                    for i, item in enumerate(data['issues'], 1):
+                                        if 'issue_number' not in item:
+                                            item['issue_number'] = i
+                                        try:
+                                            issues.append(ProofreadingIssue(**item))
+                                        except Exception:
+                                            continue
+                                    return ProofreadingParseResult(
+                                        issues=issues,
+                                        no_issues=False,
+                                    )
+
+                            # issuesキーがある場合（no_issuesフィールドなし）
+                            elif 'issues' in data:
+                                issues = []
+                                for i, item in enumerate(data['issues'], 1):
+                                    if 'issue_number' not in item:
+                                        item['issue_number'] = i
+                                    try:
+                                        issues.append(ProofreadingIssue(**item))
+                                    except Exception:
+                                        continue
+                                return ProofreadingParseResult(
+                                    issues=issues,
+                                    no_issues=len(issues) == 0,
+                                )
+
+                            # 単一の指摘の場合
+                            elif all(k in data for k in ['before', 'after', 'reasoning']):
+                                if 'issue_number' not in data:
+                                    data['issue_number'] = 1
+                                try:
+                                    return ProofreadingParseResult(
+                                        issues=[ProofreadingIssue(**data)],
+                                        no_issues=False,
+                                    )
+                                except Exception:
+                                    pass
+
+                        except Exception:
+                            continue
+
+                except (json.JSONDecodeError, Exception):
                     continue
 
                 # データがリストの場合
@@ -197,6 +269,7 @@ class ResponseParser:
             sanitized = re.sub(pattern, replacement, sanitized, flags=re.IGNORECASE)
 
         return sanitized
+
 
     def _detect_no_issue_phrase(self, response: str) -> bool:
         """テキストから指摘なしのメッセージを検出"""
