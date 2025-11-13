@@ -15,26 +15,34 @@ export default function PhaseControls({ wsManager }: PhaseControlsProps) {
   const [isExecuting, setIsExecuting] = useState(false);
 
   const executePhase = (phase: string) => {
+    console.log(`[PhaseControls] executePhase呼び出し: phase=${phase}`);
+
     if (!selectedPaper) {
+      console.error('[PhaseControls] 論文が選択されていません');
       toast.error('論文を選択してください');
       return;
     }
+    console.log(`[PhaseControls] 選択された論文: ${selectedPaper.id}`);
 
     if (!wsManager) {
+      console.error('[PhaseControls] WebSocketマネージャーがありません');
       toast.error('WebSocket接続がありません');
       return;
     }
+    console.log(`[PhaseControls] WebSocket接続状態: ${wsManager.isConnected()}`);
 
     setIsExecuting(true);
     setCurrentPhase(phase);
     addLog(`${phase}を開始します`, 'info');
 
     // Send start command through WebSocket
-    wsManager.sendMessage({
+    const message = {
       type: 'start_phase',
       phase,
       paper_id: selectedPaper.id,
-    });
+    };
+    console.log('[PhaseControls] メッセージ送信:', message);
+    wsManager.sendMessage(message);
   };
 
   const stopExecution = () => {
@@ -47,9 +55,9 @@ export default function PhaseControls({ wsManager }: PhaseControlsProps) {
   };
 
   const phases = [
-    { id: 'phase1', label: 'Phase 1 - 初回校正', color: 'blue' },
-    { id: 'phase2', label: 'Phase 2 - 埋め込み誤り検出', color: 'green' },
-    { id: 'phase3', label: 'Phase 3 - クリーン化', color: 'purple' },
+    { id: 'phase1', label: 'Phase 1 - クリーン化', color: 'blue' },
+    { id: 'phase2', label: 'Phase 2 - 誤り埋め込み', color: 'green' },
+    { id: 'phase3', label: 'Phase 3 - 校正', color: 'purple' },
   ];
 
   // Tailwind CSS requires complete class names (can't use template literals)

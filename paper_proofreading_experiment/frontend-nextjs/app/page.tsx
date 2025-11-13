@@ -16,23 +16,97 @@ let wsManager: WebSocketManager | null = null;
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
-  const { setPapers, addLog, currentPhase, selectedPaper } = useAppStore();
+  const {
+    setPapers,
+    addLog,
+    currentPhase,
+    selectedPaper,
+    setCurrentIssue,
+    setCurrentIteration,
+    setIsRunning,
+    setCurrentPhase,
+  } = useAppStore();
 
   useEffect(() => {
+    console.log('[Page] useEffect開始');
+
     // Initialize WebSocket
     if (!wsManager) {
+      console.log('[Page] WebSocketマネージャーを初期化');
       wsManager = new WebSocketManager();
+
+      // Register message handler
+      const handleMessage = (message: any) => {
+        console.log('[Page] メッセージハンドラー実行:', message);
+
+        switch (message.type) {
+          case 'phase_start':
+            console.log('[Page] フェーズ開始メッセージ:', message);
+            addLog(message.message || 'フェーズを開始しました', 'info');
+            setIsRunning(true);
+            break;
+
+          case 'phase_complete':
+            console.log('[Page] フェーズ完了メッセージ:', message);
+            addLog(message.message || 'フェーズが完了しました', 'success');
+            setIsRunning(false);
+            setCurrentPhase(null);
+            toast.success(message.message || 'フェーズが完了しました');
+            break;
+
+          case 'iteration_start':
+            console.log('[Page] イテレーション開始:', message);
+            addLog(`イテレーション ${message.iteration} を開始`, 'info');
+            setCurrentIteration(message.iteration || 0);
+            break;
+
+          case 'user_action_required':
+            console.log('[Page] ユーザーアクション要求:', message);
+            addLog('ユーザーの判断が必要です', 'warning');
+            if (message.issue) {
+              setCurrentIssue(message.issue);
+            }
+            break;
+
+          case 'action_received':
+            console.log('[Page] アクション受信確認:', message);
+            addLog(`アクション受信: ${message.action}`, 'info');
+            break;
+
+          case 'error':
+            console.error('[Page] エラーメッセージ:', message);
+            addLog(`エラー: ${message.message}`, 'error');
+            toast.error(message.message || 'エラーが発生しました');
+            setIsRunning(false);
+            break;
+
+          case 'log':
+            console.log('[Page] ログメッセージ:', message);
+            addLog(message.message, message.level || 'info');
+            break;
+
+          default:
+            console.warn('[Page] 不明なメッセージタイプ:', message.type, message);
+        }
+      };
+
+      wsManager.addMessageHandler(handleMessage);
+      console.log('[Page] メッセージハンドラーを登録しました');
+
       wsManager.connect();
       addLog('WebSocket接続を確立しました', 'info');
     }
 
     // Load papers
     const loadPapers = async () => {
+      console.log('[Page] 論文読み込み開始');
       try {
         const papers = await papersAPI.list();
         setPapers(papers);
         addLog(`${papers.length}件の論文を読み込みました`, 'info');
+        console.log(`[Page] ${papers.length}件の論文を読み込みました`);
       } catch (error) {
+        console.error('[Page] 論文読み込みエラー:', error);
         addLog('論文の読み込みに失敗しました', 'error');
         toast.error('論文の読み込みに失敗しました');
       } finally {
@@ -44,11 +118,12 @@ export default function Home() {
 
     // Cleanup on unmount
     return () => {
+      console.log('[Page] クリーンアップ');
       if (wsManager) {
         wsManager.disconnect();
       }
     };
-  }, [setPapers, addLog]);
+  }, [setPapers, addLog, setCurrentIssue, setCurrentIteration, setIsRunning, setCurrentPhase]);
 
   if (isLoading) {
     return (

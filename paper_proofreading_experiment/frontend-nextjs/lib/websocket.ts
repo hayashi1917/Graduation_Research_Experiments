@@ -23,38 +23,46 @@ export class WebSocketManager {
 
   connect(): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('[WebSocket] 既に接続済み');
       return;
     }
 
     const wsUrl = `ws://localhost:8000/ws/${this.clientId}`;
+    console.log(`[WebSocket] 接続開始: ${wsUrl}`);
 
     try {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log('WebSocket connected');
+        console.log('[WebSocket] 接続成功');
         this.reconnectAttempts = 0;
       };
 
       this.ws.onmessage = (event) => {
+        console.log('[WebSocket] メッセージ受信:', event.data);
         try {
           const message: WebSocketMessage = JSON.parse(event.data);
-          this.messageHandlers.forEach((handler) => handler(message));
+          console.log('[WebSocket] パース成功:', message);
+          console.log(`[WebSocket] メッセージハンドラー数: ${this.messageHandlers.length}`);
+          this.messageHandlers.forEach((handler, index) => {
+            console.log(`[WebSocket] ハンドラー ${index} を実行中`);
+            handler(message);
+          });
         } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
+          console.error('[WebSocket] メッセージパース失敗:', error, 'データ:', event.data);
         }
       };
 
       this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error('[WebSocket] エラー:', error);
       };
 
       this.ws.onclose = () => {
-        console.log('WebSocket disconnected');
+        console.log('[WebSocket] 切断');
         this.attemptReconnect();
       };
     } catch (error) {
-      console.error('Failed to create WebSocket:', error);
+      console.error('[WebSocket] WebSocket作成失敗:', error);
       this.attemptReconnect();
     }
   }
@@ -87,14 +95,19 @@ export class WebSocketManager {
   }
 
   sendMessage(message: any): void {
+    console.log('[WebSocket] メッセージ送信:', message);
     if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
+      const jsonStr = JSON.stringify(message);
+      console.log('[WebSocket] JSON送信:', jsonStr);
+      this.ws.send(jsonStr);
+      console.log('[WebSocket] 送信完了');
     } else {
-      console.error('WebSocket is not connected');
+      console.error('[WebSocket] 接続されていません。readyState:', this.ws?.readyState);
     }
   }
 
   sendAction(action: string): void {
+    console.log('[WebSocket] アクション送信:', action);
     this.sendMessage({
       type: 'action',
       action,

@@ -7,6 +7,14 @@ from pathlib import Path
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Dict
 import os
+import logging
+
+# ロギング設定
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # srcディレクトリをパスに追加
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
@@ -50,21 +58,27 @@ manager = ConnectionManager()
 @router.websocket("/ws/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str):
     """WebSocket接続"""
+    logger.info(f"WebSocket接続開始: client_id={client_id}")
     await manager.connect(websocket, client_id)
 
     try:
         while True:
             data = await websocket.receive_json()
+            logger.info(f"受信メッセージ: client_id={client_id}, type={data.get('type')}, data={data}")
 
             # クライアントからのメッセージを処理
             if data.get("type") == "action":
                 # ユーザーの判断を受信
                 action = data.get("action")
+                logger.info(f"ユーザーアクション受信: client_id={client_id}, action={action}")
 
                 # 実行中のアダプターにアクションを通知
                 adapter = manager.get_adapter(client_id)
                 if adapter:
                     adapter.set_user_action(action)
+                    logger.info(f"アダプターにアクション通知: client_id={client_id}")
+                else:
+                    logger.warning(f"アダプターが見つかりません: client_id={client_id}")
 
                 await manager.send_message({
                     "type": "action_received",
@@ -75,6 +89,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 # フェーズ実行を開始
                 paper_id = data.get("paper_id")
                 phase = data.get("phase")
+                logger.info(f"フェーズ実行開始: client_id={client_id}, phase={phase}, paper_id={paper_id}")
 
                 # バックグラウンドで実行
                 from ..core.dependencies import get_paper_manager, get_data_manager
@@ -89,11 +104,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                         papers_dir, versions_dir
                     )
                 )
+            else:
+                logger.warning(f"不明なメッセージタイプ: client_id={client_id}, type={data.get('type')}")
 
     except WebSocketDisconnect:
+        logger.info(f"WebSocket切断: client_id={client_id}")
         manager.disconnect(client_id)
     except Exception as e:
-        print(f"WebSocketエラー: {e}")
+        logger.error(f"WebSocketエラー: client_id={client_id}, error={e}", exc_info=True)
         manager.disconnect(client_id)
 
 
@@ -103,6 +121,7 @@ async def execute_phase(
 ):
     """フェーズを実行（バックグラウンドタスク）"""
     try:
+        logger.info(f"execute_phase開始: phase={phase}, paper_id={paper_id}")
         from ..core.dependencies import get_data_manager, get_paper_manager
         from ..core.config import settings
 
@@ -111,18 +130,23 @@ async def execute_phase(
 
         # 論文ファイルのパスを取得
         paper_dir = papers_dir / paper_id
+        logger.info(f"論文ディレクトリ: {paper_dir}")
         pdf_files = list(paper_dir.glob("*.pdf"))
         tex_files = list(paper_dir.glob("*.tex"))
+        logger.info(f"PDFファイル: {pdf_files}, TeXファイル: {tex_files}")
 
         if not pdf_files or not tex_files:
+            error_msg = "論文ファイルが見つかりません"
+            logger.error(f"{error_msg}: paper_dir={paper_dir}")
             await manager.send_message({
                 "type": "error",
-                "message": "論文ファイルが見つかりません",
+                "message": error_msg,
             }, client_id)
             return
 
         pdf_path = pdf_files[0]
         tex_path = tex_files[0]
+        logger.info(f"使用ファイル: PDF={pdf_path}, TeX={tex_path}")
 
         # LLMクライアントの初期化
         if phase in ["phase1", "phase3"]:
@@ -134,21 +158,25 @@ async def execute_phase(
         provider = llm_config["provider"]
         model = llm_config["model"]
         temperature = llm_config.get("temperature", 0.0)
+        logger.info(f"LLM設定: provider={provider}, model={model}, temperature={temperature}")
 
         if provider == "gemini":
             api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
             if not api_key:
                 raise ValueError("環境変数 GOOGLE_API_KEY または GEMINI_API_KEY が設定されていません")
             llm_client = GeminiClient(model=model, api_key=api_key, temperature=temperature)
+            logger.info("GeminiClientを初期化しました")
         elif provider == "anthropic":
             api_key = os.getenv("ANTHROPIC_API_KEY")
             if not api_key:
                 raise ValueError("環境変数 ANTHROPIC_API_KEY が設定されていません")
             llm_client = ClaudeClient(model=model, api_key=api_key, temperature=temperature)
+            logger.info("ClaudeClientを初期化しました")
         else:
             raise ValueError(f"未対応のプロバイダー: {provider}")
 
         # フェーズ実行
+        logger.info(f"フェーズ実行関数呼び出し: phase={phase}")
         if phase == "phase1":
             await execute_phase1(
                 paper_id, pdf_path, tex_path, llm_client, websocket, client_id,
@@ -164,10 +192,12 @@ async def execute_phase(
                 paper_id, pdf_path, tex_path, llm_client, websocket, client_id,
                 data_manager, paper_manager, settings
             )
+        logger.info(f"フェーズ実行完了: phase={phase}")
 
     except Exception as e:
         import traceback
         error_msg = f"{str(e)}\n{traceback.format_exc()}"
+        logger.error(f"execute_phaseエラー: phase={phase}, error={error_msg}")
         await manager.send_message({
             "type": "error",
             "message": error_msg,
@@ -180,6 +210,7 @@ async def execute_phase1(
 ):
     """フェーズ1を実行"""
     try:
+        logger.info(f"Phase1実行開始: paper_id={paper_id}")
         await manager.send_message({
             "type": "phase_start",
             "phase": "phase1",
@@ -187,6 +218,7 @@ async def execute_phase1(
         }, client_id)
 
         # WebSocketアダプターを作成
+        logger.info("WebSocketPhase1Adapterを作成中...")
         adapter = WebSocketPhase1Adapter(
             llm_client=llm_client,
             data_manager=data_manager,
@@ -195,17 +227,21 @@ async def execute_phase1(
             checklist=settings.checklist,
             versions_dir=versions_dir,
         )
+        logger.info("WebSocketPhase1Adapterを作成しました")
 
         # アダプターを登録
         manager.set_adapter(client_id, adapter)
+        logger.info(f"アダプターを登録しました: client_id={client_id}")
 
         # 実行
+        logger.info("adapter.run()を呼び出します...")
         result = await adapter.run(
             paper_id=paper_id,
             pdf_path=pdf_path,
             tex_path=tex_path,
             websocket=websocket,
         )
+        logger.info(f"adapter.run()が完了しました: result={result}")
 
         await manager.send_message({
             "type": "phase_complete",
@@ -213,17 +249,21 @@ async def execute_phase1(
             "message": f"フェーズ1が完了しました（イテレーション: {result['iterations']}）",
             "result": result,
         }, client_id)
+        logger.info(f"Phase1実行完了: paper_id={paper_id}, iterations={result['iterations']}")
 
     except Exception as e:
         import traceback
+        error_msg = f"フェーズ1実行エラー: {str(e)}\n{traceback.format_exc()}"
+        logger.error(error_msg)
         await manager.send_message({
             "type": "error",
-            "message": f"フェーズ1実行エラー: {str(e)}\n{traceback.format_exc()}",
+            "message": error_msg,
         }, client_id)
     finally:
         # アダプターを削除
         if client_id in manager.phase_adapters:
             del manager.phase_adapters[client_id]
+            logger.info(f"アダプターを削除しました: client_id={client_id}")
 
 
 async def execute_phase2(
