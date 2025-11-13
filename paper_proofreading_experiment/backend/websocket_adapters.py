@@ -262,8 +262,25 @@ class WebSocketPhase1Adapter:
                     context="パース失敗後の継続確認",
                 )
 
+                # パース失敗時もイテレーション結果を記録
                 if continue_choice != "Y":
                     stopped_reason = "parse_failed"
+                else:
+                    stopped_reason = ""  # 継続中
+
+                self.data_manager.record_iteration(
+                    session_id=phase1_id,
+                    paper_id=paper_id,
+                    phase="phase1",
+                    iteration=iteration,
+                    llm_model=self.llm_client.model,
+                    detected_errors=[],
+                    new_issues_count=0,
+                    excluded_items=excluded_items,
+                    stopped_reason=stopped_reason,
+                )
+
+                if continue_choice != "Y":
                     break
                 continue
 
@@ -361,8 +378,20 @@ class WebSocketPhase1Adapter:
                     stopped_reason = "user_abort"
                     break
 
-            # 中断判定 - 記録せずに終了
+            # 中断判定
             if stopped_reason == "user_abort":
+                # 中断時もイテレーション結果を記録
+                self.data_manager.record_iteration(
+                    session_id=phase1_id,
+                    paper_id=paper_id,
+                    phase="phase1",
+                    iteration=iteration,
+                    llm_model=self.llm_client.model,
+                    detected_errors=detected_in_iteration,
+                    new_issues_count=len(issues),
+                    excluded_items=excluded_items,
+                    stopped_reason=stopped_reason,
+                )
                 break
 
             # 次のイテレーションに進むか確認
@@ -383,8 +412,25 @@ class WebSocketPhase1Adapter:
                 context="イテレーション後の継続確認",
             )
 
+            # イテレーション結果を記録（継続/停止にかかわらず）
             if continue_choice != "Y":
                 stopped_reason = "user_stop"
+            else:
+                stopped_reason = ""  # 継続中
+
+            self.data_manager.record_iteration(
+                session_id=phase1_id,
+                paper_id=paper_id,
+                phase="phase1",
+                iteration=iteration,
+                llm_model=self.llm_client.model,
+                detected_errors=detected_in_iteration,
+                new_issues_count=len(issues),
+                excluded_items=excluded_items,
+                stopped_reason=stopped_reason,
+            )
+
+            if continue_choice != "Y":
                 # 中断時は進捗を保存（次回このイテレーションから再開）
                 self.data_manager.save_progress(
                     paper_id=paper_id,
@@ -752,8 +798,25 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                     context="パース失敗後の継続確認",
                 )
 
+                # パース失敗時もイテレーション結果を記録
                 if continue_choice != "Y":
                     stopped_reason = "parse_failed"
+                else:
+                    stopped_reason = ""  # 継続中
+
+                self.data_manager.record_iteration(
+                    session_id=session_id,
+                    paper_id=paper_id,
+                    phase=phase,
+                    iteration=iteration,
+                    llm_model=self.llm_client.model,
+                    detected_errors=[],
+                    new_issues_count=0,
+                    excluded_items=excluded_items,
+                    stopped_reason=stopped_reason,
+                )
+
+                if continue_choice != "Y":
                     break
                 continue
 
@@ -872,8 +935,20 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                     stopped_reason = "user_abort"
                     break
 
-            # 中断判定 - 記録せずに終了
+            # 中断判定
             if stopped_reason == "user_abort":
+                # 中断時もイテレーション結果を記録
+                self.data_manager.record_iteration(
+                    session_id=session_id,
+                    paper_id=paper_id,
+                    phase=phase,
+                    iteration=iteration,
+                    llm_model=self.llm_client.model,
+                    detected_errors=detected_in_iteration,
+                    new_issues_count=len(issues),
+                    excluded_items=excluded_items,
+                    stopped_reason=stopped_reason,
+                )
                 break
 
             # 次のイテレーションに進むか確認
@@ -894,8 +969,25 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                 context="イテレーション後の継続確認",
             )
 
+            # イテレーション結果を記録（継続/停止にかかわらず）
             if continue_choice != "Y":
                 stopped_reason = "user_stop"
+            else:
+                stopped_reason = ""  # 継続中
+
+            self.data_manager.record_iteration(
+                session_id=session_id,
+                paper_id=paper_id,
+                phase=phase,
+                iteration=iteration,
+                llm_model=self.llm_client.model,
+                detected_errors=detected_in_iteration,
+                new_issues_count=len(issues),
+                excluded_items=excluded_items,
+                stopped_reason=stopped_reason,
+            )
+
+            if continue_choice != "Y":
                 # 中断時は進捗を保存（次回このイテレーションから再開）
                 self.data_manager.save_progress(
                     paper_id=paper_id,
