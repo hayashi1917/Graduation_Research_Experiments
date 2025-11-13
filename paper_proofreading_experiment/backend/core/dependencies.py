@@ -51,12 +51,21 @@ def get_llm_client(provider: str = None, model: str = None) -> LLMClient:
     if provider is None:
         provider = settings.settings.get("llm", {}).get("provider", "gemini")
 
-    if model is None:
-        model = settings.settings.get("llm", {}).get("model", "gemini-1.5-pro")
+    provider_lower = provider.lower()
 
-    if provider.lower() == "gemini":
+    if model is None:
+        # Pull model from settings if available, otherwise fall back to
+        # provider-specific defaults.
+        model = settings.settings.get("llm", {}).get("model")
+        if model is None:
+            if provider_lower == "gemini":
+                model = "gemini-2.5-pro"
+            elif provider_lower == "claude":
+                model = "claude-sonnet-4-5-20250929"
+
+    if provider_lower == "gemini":
         return GeminiClient(model=model)
-    elif provider.lower() == "claude":
+    elif provider_lower == "claude":
         return ClaudeClient(model=model)
     else:
         raise ValueError(f"Unknown LLM provider: {provider}")
