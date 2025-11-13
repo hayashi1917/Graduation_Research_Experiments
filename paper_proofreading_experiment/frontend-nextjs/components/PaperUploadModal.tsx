@@ -13,21 +13,20 @@ interface PaperUploadModalProps {
 export default function PaperUploadModal({ onClose }: PaperUploadModalProps) {
   const [paperId, setPaperId] = useState('');
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [texFile, setTexFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const { addLog, setPapers } = useAppStore();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    if (!paperId || !pdfFile || !texFile) {
+    if (!paperId || !pdfFile) {
       toast.error('すべての項目を入力してください');
       return;
     }
 
     setIsUploading(true);
     try {
-      await papersAPI.upload(paperId, pdfFile, texFile);
+      await papersAPI.upload(paperId, pdfFile);
       toast.success(`論文 ${paperId} をアップロードしました`);
       addLog(`論文 ${paperId} をアップロードしました`, 'success');
 
@@ -80,19 +79,6 @@ export default function PaperUploadModal({ onClose }: PaperUploadModalProps) {
               type="file"
               accept=".pdf"
               onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
-              className="w-full"
-              disabled={isUploading}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              TeXファイル
-            </label>
-            <input
-              type="file"
-              accept=".tex"
-              onChange={(e) => setTexFile(e.target.files?.[0] || null)}
               className="w-full"
               disabled={isUploading}
             />

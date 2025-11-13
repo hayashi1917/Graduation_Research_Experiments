@@ -5,7 +5,6 @@
 export interface Paper {
   id: string;
   pdf: string;
-  tex: string;
 }
 
 export interface Phase1Session {
@@ -16,7 +15,6 @@ export interface Phase1Session {
   iterations: number;
   excluded_items: string[];
   status: 'in_progress' | 'completed' | 'aborted';
-  final_tex_path: string;
   final_pdf_path: string;
 }
 
@@ -50,5 +48,5 @@ export interface DetectionRate {
   detection_rate: number;
 }
 
-export type UserAction = 'A' | 'M' | 'S' | 'D' | 'Q';
+export type UserAction = 'A' | 'S' | 'Q';
 export type UserChoice = 'Y' | 'N';
