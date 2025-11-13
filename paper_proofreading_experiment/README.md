@@ -180,9 +180,8 @@ npm run dev
 #### ターミナル1: バックエンドサーバー
 
 ```bash
-# プロジェクトルートから
-cd backend
-python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+# プロジェクトルート (paper_proofreading_experiment) から実行
+python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 #### ターミナル2: フロントエンドサーバー
@@ -213,8 +212,8 @@ npm start
 #### バックエンドの起動
 
 ```bash
-cd backend
-uvicorn main:app --host 0.0.0.0 --port 8000
+# プロジェクトルートから
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
 ## 使い方
@@ -287,6 +286,22 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 **エラー**: `JSONDecodeError: Expecting value: line 1 column 1 (char 0)`
 
 **解決方法**: 空または破損した進捗ファイルが原因です。リセットボタンで進捗情報を削除してください。
+
+### ImportError: attempted relative import
+
+**エラー**: `ImportError: attempted relative import with no known parent package`
+
+**解決方法**: バックエンドサーバーは必ずプロジェクトルート (`paper_proofreading_experiment`) から実行してください：
+
+```bash
+# 正しい方法
+cd paper_proofreading_experiment
+python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
+# 間違った方法（動作しません）
+cd backend
+python -m uvicorn main:app --reload
+```
 
 ## 開発ロードマップ
 
