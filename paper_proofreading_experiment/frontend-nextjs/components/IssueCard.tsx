@@ -2,12 +2,17 @@
 
 import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { Copy, CheckCircle, AlertCircle } from 'lucide-react';
+import { Copy, CheckCircle, AlertCircle, CheckSquare, Edit, SkipForward, HelpCircle, XCircle } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils';
+import { WebSocketManager } from '@/lib/websocket';
 import toast from 'react-hot-toast';
 
-export default function IssueCard() {
-  const { currentIssue, currentPhase } = useAppStore();
+interface IssueCardProps {
+  wsManager: WebSocketManager | null;
+}
+
+export default function IssueCard({ wsManager }: IssueCardProps) {
+  const { currentIssue, currentPhase, isRunning } = useAppStore();
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   if (!currentIssue) {
@@ -32,6 +37,16 @@ export default function IssueCard() {
     } else {
       toast.error('コピーに失敗しました');
     }
+  };
+
+  const handleAction = (action: string, label: string) => {
+    if (!wsManager) {
+      toast.error('WebSocket接続がありません');
+      return;
+    }
+
+    wsManager.sendAction(action);
+    toast.success(`${label}を選択しました`);
   };
 
   const CopyButton = ({ text, field }: { text: string; field: string }) => {
@@ -117,6 +132,62 @@ export default function IssueCard() {
           {currentPhase || '実行中ではありません'}
         </p>
       </div>
+
+      {/* Action Buttons */}
+      {isRunning && wsManager && (
+        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h3 className="text-sm font-semibold text-gray-900 mb-3">この指摘への対応を選択してください：</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+            {/* Auto Apply */}
+            <button
+              onClick={() => handleAction('A', '自動適用')}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+            >
+              <CheckSquare className="w-4 h-4" />
+              <span>自動適用 (A)</span>
+            </button>
+
+            {/* Manual */}
+            <button
+              onClick={() => handleAction('M', '手動修正')}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              <Edit className="w-4 h-4" />
+              <span>手動修正 (M)</span>
+            </button>
+
+            {/* Skip */}
+            <button
+              onClick={() => handleAction('S', 'スキップ')}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 transition-colors"
+            >
+              <SkipForward className="w-4 h-4" />
+              <span>スキップ (S)</span>
+            </button>
+
+            {/* Difficult */}
+            <button
+              onClick={() => handleAction('D', '判断困難')}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
+            >
+              <HelpCircle className="w-4 h-4" />
+              <span>判断困難 (D)</span>
+            </button>
+
+            {/* Quit */}
+            <button
+              onClick={() => handleAction('Q', '中断')}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+            >
+              <XCircle className="w-4 h-4" />
+              <span>中断 (Q)</span>
+            </button>
+          </div>
+          <p className="text-xs text-gray-600 mt-3">
+            ※ 自動適用: 提案された修正を自動で適用 | 手動修正: 後で手動で修正 | スキップ: 誤検出として無視 | 判断困難: 除外項目に追加 | 中断: フェーズを終了
+          </p>
+        </div>
+      )}
     </div>
   );
 }
