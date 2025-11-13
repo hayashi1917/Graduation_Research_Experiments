@@ -27,7 +27,8 @@ class PaperManager:
         paper_id: str,
         phase: str,
         iteration: int,
-        pdf_path: Path,
+        pdf_path: Optional[Path] = None,
+        tex_path: Optional[Path] = None,
     ):
         """
         現在の論文ファイルをバージョンとして保存
@@ -36,7 +37,8 @@ class PaperManager:
             paper_id: 論文ID
             phase: フェーズ名
             iteration: イテレーション番号
-            pdf_path: PDFファイルのパス
+            pdf_path: PDFファイルのパス（任意）
+            tex_path: TeXファイルのパス（任意）
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         version_name = f"{phase}_iter{iteration}_{timestamp}"
@@ -47,6 +49,10 @@ class PaperManager:
         # PDFファイルをコピー
         if pdf_path and pdf_path.exists():
             shutil.copy2(pdf_path, version_dir / pdf_path.name)
+
+        # TeXファイルをコピー
+        if tex_path and tex_path.exists():
+            shutil.copy2(tex_path, version_dir / tex_path.name)
 
         print(f"✓ バージョンを保存しました: {version_dir}")
 
