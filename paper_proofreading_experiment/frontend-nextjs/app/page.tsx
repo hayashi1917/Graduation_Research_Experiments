@@ -172,7 +172,7 @@ export default function Home() {
 
           {/* Right column - Issue display and logs */}
           <div className="lg:col-span-2 space-y-6">
-            <IssueCard />
+            <IssueCard wsManager={wsManager} />
             <LogOutput />
           </div>
         </div>
