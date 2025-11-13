@@ -45,6 +45,20 @@ class WebSocketPhase1Adapter:
         self.user_action_payload = None
         self.action_event = None
 
+    @staticmethod
+    def _normalize_issue_action(action: str) -> str:
+        mapping = {
+            "A": "accept",
+            "M": "manual_fix",
+            "S": "skip",
+            "Q": "abort",
+        }
+        return mapping.get(action, action)
+
+    @staticmethod
+    def _is_detection_action(action: str) -> bool:
+        return action in {"A", "M"}
+
     async def run(
         self,
         paper_id: str,
@@ -80,11 +94,19 @@ class WebSocketPhase1Adapter:
 
             # Phase1セッション情報を保存
             from datetime import datetime
+            started_at = datetime.now().isoformat()
             self.data_manager.save_phase1_session(
                 phase1_id=phase1_id,
                 paper_id=paper_id,
-                started_at=datetime.now().isoformat(),
+                started_at=started_at,
                 status="in_progress",
+            )
+
+            # Phase1開始をsessions.jsonにも記録
+            self.data_manager.save_session_metadata(
+                session_id=phase1_id,
+                paper_id=paper_id,
+                phase1_start=started_at,
             )
 
             await websocket.send_json({
@@ -365,6 +387,14 @@ class WebSocketPhase1Adapter:
                             })
                             continue
 
+                        if checklist_item in excluded_items:
+                            await websocket.send_json({
+                                "type": "log",
+                                "message": f"指摘 {issue.issue_number}: '{checklist_item}' は既に除外済みです",
+                                "level": "warning",
+                            })
+                            continue
+
                         await websocket.send_json({
                             "type": "log",
                             "message": f"指摘 {issue.issue_number}: '{checklist_item}' を除外に追加しました",
@@ -477,6 +507,7 @@ class WebSocketPhase1Adapter:
 
         # Phase1セッション情報を更新
         from datetime import datetime
+        completed_at = datetime.now().isoformat()
         final_status = "completed" if stopped_reason in ["no_issues", "user_stop"] else "aborted"
 
         # 最終バージョンを保存
@@ -493,11 +524,18 @@ class WebSocketPhase1Adapter:
         # Phase1セッション情報を更新
         self.data_manager.update_phase1_session(
             phase1_id=phase1_id,
-            completed_at=datetime.now().isoformat(),
+            completed_at=completed_at,
             iterations=iteration,
             excluded_items=excluded_items,
             status=final_status,
             final_pdf_path=str(final_pdf_path) if pdf_path.exists() else "",
+        )
+
+        # sessions.jsonのメタデータも更新
+        self.data_manager.update_session_metadata(
+            session_id=phase1_id,
+            paper_id=paper_id,
+            phase1_end=completed_at,
         )
 
         await websocket.send_json({
@@ -652,6 +690,21 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
             })
 
         stopped_reason = ""
+
+        embedded_error_state: Dict[str, Dict[str, Any]] = {}
+        if phase == "phase3":
+            embedded_error_state = self.data_manager.load_embedded_error_state(
+                session_id=session_id,
+                paper_id=paper_id,
+            )
+            if iteration > 0:
+                self.data_manager.mark_detected_errors_from_history(
+                    session_id=session_id,
+                    paper_id=paper_id,
+                    phase=phase,
+                    max_iteration=iteration,
+                    embedded_errors=embedded_error_state,
+                )
 
         while True:
             iteration += 1
@@ -852,6 +905,8 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                         })
                         continue
 
+                    normalized_action = self._normalize_issue_action(action)
+
                     self.data_manager.record_detected_issue(
                         session_id=session_id,
                         paper_id=paper_id,
@@ -862,7 +917,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                         before=issue.before,
                         reasoning=issue.reasoning,
                         after=issue.after,
-                        user_action=action,
+                        user_action=normalized_action,
                     )
 
                     self.data_manager.record_user_action(
@@ -875,15 +930,44 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                         context=f"issue_{issue.issue_number}/{len(issues)}",
                     )
 
-                    if action in {"A", "M"}:
+                    if self._is_detection_action(action):
                         await websocket.send_json({
                             "type": "log",
                             "message": f"指摘 {issue.issue_number}: {'承認' if action == 'A' else '手動修正'}を選択",
                             "level": "info"
                         })
-                        detected_in_iteration.append(
-                            f"issue_{issue.issue_number}_{'accepted' if action == 'A' else 'manual'}"
+                        matched_error_id = None
+                        if embedded_error_state:
+                            matched_error_id = self.data_manager.find_matching_embedded_error(
+                                embedded_error_state,
+                                detected_before=issue.before,
+                                detected_after=issue.after,
+                            )
+                            if matched_error_id:
+                                embedded_error_state[matched_error_id]["detected"] = True
+                                embedded_error_state[matched_error_id]["detected_iteration"] = iteration
+                                checklist_item = embedded_error_state[matched_error_id][
+                                    "checklist_item"
+                                ]
+                                self.data_manager.record_detected_embedded_error(
+                                    session_id=session_id,
+                                    paper_id=paper_id,
+                                    phase=phase,
+                                    iteration=iteration,
+                                    issue_number=issue.issue_number,
+                                    embedded_error_id=matched_error_id,
+                                    checklist_item=checklist_item,
+                                    action=normalized_action,
+                                )
+
+                        label = (
+                            f"issue_{issue.issue_number}_"
+                            f"{'accepted' if action == 'A' else 'manual'}"
                         )
+                        if matched_error_id:
+                            label = f"{label}_error_{matched_error_id}"
+
+                        detected_in_iteration.append(label)
                         break
 
                     if action == "S":
@@ -895,6 +979,14 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                                 "type": "log",
                                 "message": "除外するチェックリスト項目名が入力されていません。もう一度入力してください。",
                                 "level": "error"
+                            })
+                            continue
+
+                        if checklist_item in excluded_items:
+                            await websocket.send_json({
+                                "type": "log",
+                                "message": f"指摘 {issue.issue_number}: '{checklist_item}' は既に除外済みです",
+                                "level": "warning",
                             })
                             continue
 
@@ -998,6 +1090,14 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                 session_id=session_id,
                 iteration=iteration,
                 excluded_items=excluded_items,
+            )
+
+        if phase == "phase3":
+            from datetime import datetime
+            self.data_manager.update_session_metadata(
+                session_id=session_id,
+                paper_id=paper_id,
+                phase3_end=datetime.now().isoformat(),
             )
 
         return {
@@ -1207,17 +1307,11 @@ class WebSocketPhase2Adapter:
 
         # セッションメタデータを更新（Phase2完了）
         from datetime import datetime
-        # 既存のメタデータを取得して更新
-        if self.data_manager.sessions_file.exists():
-            import json
-            with open(self.data_manager.sessions_file, "r", encoding="utf-8") as f:
-                sessions_data = json.load(f)
-
-            if session_id in sessions_data and paper_id in sessions_data[session_id]:
-                sessions_data[session_id][paper_id]["phase2_end"] = datetime.now().isoformat()
-
-                with open(self.data_manager.sessions_file, "w", encoding="utf-8") as f:
-                    json.dump(sessions_data, f, ensure_ascii=False, indent=2)
+        self.data_manager.update_session_metadata(
+            session_id=session_id,
+            paper_id=paper_id,
+            phase2_end=datetime.now().isoformat(),
+        )
 
         await websocket.send_json({
             "type": "log",
