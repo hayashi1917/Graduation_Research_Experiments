@@ -10,12 +10,16 @@ import PhaseControls from '@/components/PhaseControls';
 import Phase1Selector from '@/components/Phase1Selector';
 import IssueCard from '@/components/IssueCard';
 import LogOutput from '@/components/LogOutput';
+import UserChoiceDialog from '@/components/UserChoiceDialog';
 import toast from 'react-hot-toast';
 
 let wsManager: WebSocketManager | null = null;
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
+  const [showChoiceDialog, setShowChoiceDialog] = useState(false);
+  const [choiceMessage, setChoiceMessage] = useState('');
+  const [choiceOptions, setChoiceOptions] = useState<string[]>([]);
   const {
     setPapers,
     addLog,
@@ -52,6 +56,7 @@ export default function Home() {
             addLog(message.message || 'フェーズが完了しました', 'success');
             setIsRunning(false);
             setCurrentPhase(null);
+            setCurrentIssue(null);  // 指摘事項をクリア
             toast.success(message.message || 'フェーズが完了しました');
             break;
 
@@ -67,6 +72,14 @@ export default function Home() {
             if (message.issue) {
               setCurrentIssue(message.issue);
             }
+            break;
+
+          case 'user_choice_required':
+            console.log('[Page] ユーザー選択要求:', message);
+            addLog(message.message || 'ユーザーの選択が必要です', 'warning');
+            setChoiceMessage(message.message || '選択してください');
+            setChoiceOptions(message.choices || ['Y', 'N']);
+            setShowChoiceDialog(true);
             break;
 
           case 'issue_detected':
@@ -150,6 +163,13 @@ export default function Home() {
     );
   }
 
+  const handleChoice = (choice: string) => {
+    if (wsManager) {
+      wsManager.sendAction(choice);
+      addLog(`選択: ${choice}`, 'info');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -177,6 +197,16 @@ export default function Home() {
           </div>
         </div>
       </main>
+
+      {/* User choice dialog */}
+      {showChoiceDialog && (
+        <UserChoiceDialog
+          message={choiceMessage}
+          choices={choiceOptions}
+          onChoice={handleChoice}
+          onClose={() => setShowChoiceDialog(false)}
+        />
+      )}
     </div>
   );
 }
