@@ -7,6 +7,7 @@ from typing import List
 import shutil
 
 from ..core.dependencies import get_paper_manager
+from ..core.config import settings
 from ..models.responses import PaperInfo, StandardResponse
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
@@ -15,17 +16,24 @@ router = APIRouter(prefix="/api/papers", tags=["papers"])
 @router.get("/", response_model=List[PaperInfo])
 async def get_papers():
     """Get list of all papers"""
-    paper_manager = get_paper_manager()
-    papers = paper_manager.list_papers()
+    papers = []
+    papers_dir = settings.papers_dir
 
-    return [
-        PaperInfo(
-            id=paper["id"],
-            pdf=paper["pdf"],
-            tex=paper["tex"]
-        )
-        for paper in papers
-    ]
+    if papers_dir.exists():
+        for paper_dir in papers_dir.iterdir():
+            if paper_dir.is_dir():
+                pdf_files = list(paper_dir.glob("*.pdf"))
+                tex_files = list(paper_dir.glob("*.tex"))
+                if pdf_files and tex_files:
+                    papers.append(
+                        PaperInfo(
+                            id=paper_dir.name,
+                            pdf=pdf_files[0].name,
+                            tex=tex_files[0].name
+                        )
+                    )
+
+    return papers
 
 
 @router.post("/upload")
@@ -68,15 +76,20 @@ async def upload_paper(
 @router.get("/{paper_id}/info", response_model=PaperInfo)
 async def get_paper_info(paper_id: str):
     """Get information about a specific paper"""
-    paper_manager = get_paper_manager()
+    papers_dir = settings.papers_dir
+    paper_dir = papers_dir / paper_id
 
-    pdf_path, tex_path = paper_manager.get_paper_paths(paper_id)
-
-    if not pdf_path or not tex_path:
+    if not paper_dir.exists() or not paper_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"Paper {paper_id} not found")
+
+    pdf_files = list(paper_dir.glob("*.pdf"))
+    tex_files = list(paper_dir.glob("*.tex"))
+
+    if not pdf_files or not tex_files:
+        raise HTTPException(status_code=404, detail=f"Paper files not found for {paper_id}")
 
     return PaperInfo(
         id=paper_id,
-        pdf=str(pdf_path),
-        tex=str(tex_path)
+        pdf=pdf_files[0].name,
+        tex=tex_files[0].name
     )
