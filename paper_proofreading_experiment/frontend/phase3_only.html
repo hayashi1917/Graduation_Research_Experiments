@@ -3,160 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>フェーズ3簡易UI</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>フェーズ3 簡易アップローダー</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
     <link rel="stylesheet" href="/static/css/phase3_only.css">
 </head>
 <body>
-<nav class="navbar navbar-dark bg-dark">
-    <div class="container-fluid">
-        <span class="navbar-brand mb-0 h1">フェーズ3簡易モード</span>
-        <div class="d-flex gap-2">
-            <a class="btn btn-outline-light btn-sm" href="/" title="従来UIへ戻る">
-                <i class="bi bi-arrow-left"></i> メインUI
-            </a>
-            <button class="btn btn-outline-danger btn-sm" id="reset-session-btn" disabled>
-                <i class="bi bi-trash"></i> アップロードをリセット
-            </button>
-        </div>
-    </div>
-</nav>
+    <main class="container py-5">
+        <section class="text-center mb-4">
+            <h1 class="fw-bold">フェーズ3 簡易アップローダー</h1>
+            <p class="text-muted mb-0">イテレーションごとに TeX / PDF を登録してください。必要な情報だけを入力するシンプルなUIです。</p>
+        </section>
 
-<main class="container py-4">
-    <section class="hero-card mb-4">
-        <div>
-            <p class="text-uppercase text-white-50 fw-semibold small mb-1">Phase 3 Proofreading</p>
-            <h1 class="display-6 text-white">TeX / PDF をイテレーションごとに登録</h1>
-            <p class="lead text-white mb-0">各イテレーションで校正済みのTeXとPDFをアップロードし、進捗をシンプルに管理します。</p>
-        </div>
-        <div class="text-end text-white-50 small">
-            <span id="session-hint">セッション未開始</span>
-        </div>
-    </section>
-
-    <div class="row g-4">
-        <div class="col-lg-5">
-            <div class="card shadow-sm">
-                <div class="card-header bg-transparent">
-                    <h5 class="mb-0"><i class="bi bi-clipboard-check text-primary me-2"></i>セッション設定</h5>
-                </div>
-                <div class="card-body">
-                    <form id="session-form" class="vstack gap-3">
-                        <div>
-                            <label for="paper-id-input" class="form-label">論文ID</label>
-                            <input type="text" id="paper-id-input" class="form-control" placeholder="example-paper" required>
-                        </div>
-                        <div>
-                            <label for="max-iterations-input" class="form-label">最大イテレーション数</label>
-                            <input type="number" id="max-iterations-input" class="form-control" min="1" value="3" required>
-                            <div class="form-text">ここで指定した回数までアップロードを受け付けます。</div>
-                        </div>
-                        <button class="btn btn-primary w-100" type="submit">
-                            <i class="bi bi-play-circle me-1"></i> セッションを開始
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            <div class="card shadow-sm mt-4" id="status-card" style="display:none;">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div>
-                            <p class="text-muted mb-0 small">次のイテレーション</p>
-                            <h2 class="fw-bold mb-0" id="next-iteration-label">-</h2>
-                        </div>
-                        <span class="badge rounded-pill text-bg-success" id="session-badge">準備OK</span>
-                    </div>
-                    <div class="progress" role="progressbar" aria-label="iteration progress">
-                        <div class="progress-bar" id="iteration-progress" style="width: 0%"></div>
-                    </div>
-                    <p class="small text-muted mt-3 mb-0" id="progress-hint"></p>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-lg-7">
-            <div class="card shadow-sm" id="uploader-card">
-                <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-upload text-success me-2"></i>イテレーション入力</h5>
-                    <span class="badge text-bg-secondary" id="iteration-helper">セッションを開始してください</span>
-                </div>
-                <div class="card-body">
-                    <form id="iteration-form" class="row g-3">
-                        <div class="col-sm-4">
-                            <label for="iteration-input" class="form-label">イテレーション番号</label>
-                            <input type="number" id="iteration-input" class="form-control" value="1" min="1" readonly>
-                        </div>
-                        <div class="col-sm-8">
-                            <label for="tex-file-input" class="form-label">TeXファイル (.tex)</label>
-                            <input type="file" id="tex-file-input" class="form-control" accept=".tex" required disabled>
-                        </div>
-                        <div class="col-sm-8">
-                            <label for="pdf-file-input" class="form-label">PDFファイル (.pdf)</label>
-                            <input type="file" id="pdf-file-input" class="form-control" accept="application/pdf" required disabled>
-                        </div>
-                        <div class="col-sm-4 d-flex align-items-end">
-                            <button class="btn btn-success w-100" type="submit" id="upload-btn" disabled>
-                                <i class="bi bi-arrow-return-right me-1"></i> 登録
-                            </button>
-                        </div>
-                    </form>
-                    <div class="alert alert-info mt-3" id="upload-hint">
-                        <i class="bi bi-info-circle me-1"></i> セッション開始後、順番にファイルを指定してください。
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <section class="mt-4">
         <div class="card shadow-sm">
-            <div class="card-header bg-transparent d-flex justify-content-between align-items-center">
-                <h5 class="mb-0"><i class="bi bi-journal-text text-warning me-2"></i>アップロード履歴</h5>
-                <span class="text-muted small" id="history-counter">0件</span>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 80px;">#</th>
-                                <th>TeX</th>
-                                <th>PDF</th>
-                                <th style="width: 220px;">アップロード日時</th>
-                            </tr>
-                        </thead>
-                        <tbody id="history-body">
-                            <tr>
-                                <td colspan="4" class="text-center text-muted py-4">セッションを開始してください</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <section class="mt-4">
-        <div class="card shadow-sm">
-            <div class="card-header bg-transparent">
-                <h5 class="mb-0"><i class="bi bi-activity text-danger me-2"></i>アクティビティログ</h5>
-            </div>
             <div class="card-body">
-                <div id="log-feed" class="log-feed">
-                    <div class="text-muted small">まだ操作はありません。</div>
-                </div>
+                <form id="phase3-form" class="row g-3" novalidate>
+                    <div class="col-md-6">
+                        <label for="paper-id" class="form-label">論文ID</label>
+                        <input type="text" class="form-control" id="paper-id" placeholder="example-paper" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="iteration" class="form-label">イテレーション番号</label>
+                        <input type="number" class="form-control" id="iteration" min="1" value="1" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="tex-file" class="form-label">TeXファイル (.tex)</label>
+                        <input type="file" class="form-control" id="tex-file" accept=".tex" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="pdf-file" class="form-label">PDFファイル (.pdf)</label>
+                        <input type="file" class="form-control" id="pdf-file" accept="application/pdf" required>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary px-4">アップロード</button>
+                    </div>
+                </form>
             </div>
         </div>
-    </section>
-</main>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/axios@1.6.8/dist/axios.min.js"></script>
-<script type="module" src="/static/js/phase3_only.js"></script>
+        <div id="status-area" class="alert mt-4 d-none" role="alert"></div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios@1.6.8/dist/axios.min.js"></script>
+    <script type="module" src="/static/js/phase3_only.js"></script>
 </body>
 </html>

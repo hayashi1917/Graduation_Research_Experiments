@@ -119,40 +119,7 @@ async def read_phase3_only():
     return FileResponse(page_path)
 
 
-def _phase3_manifest_path(paper_id: str) -> Path:
-    return phase3_only_dir / paper_id / "manifest.json"
-
-
-def _load_phase3_manifest(paper_id: str) -> dict:
-    manifest_path = _phase3_manifest_path(paper_id)
-    if manifest_path.exists():
-        try:
-            return json.loads(manifest_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            pass
-    return {"paper_id": paper_id, "iterations": []}
-
-
-def _save_phase3_manifest(paper_id: str, manifest: dict):
-    manifest_path = _phase3_manifest_path(paper_id)
-    manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-@app.get("/api/phase3-only/iterations/{paper_id}")
-async def list_phase3_iterations(paper_id: str):
-    """フェーズ3簡易モードのアップロード履歴を取得"""
-    manifest = _load_phase3_manifest(paper_id)
-    iterations = sorted(manifest.get("iterations", []), key=lambda item: item.get("iteration", 0))
-    next_iteration = iterations[-1]["iteration"] + 1 if iterations else 1
-    return {
-        "paper_id": paper_id,
-        "iterations": iterations,
-        "next_iteration": next_iteration,
-    }
-
-
-@app.post("/api/phase3-only/iterations")
+@app.post("/api/phase3-only/upload")
 async def upload_phase3_iteration(
     paper_id: str = Form(...),
     iteration: int = Form(...),
@@ -185,45 +152,13 @@ async def upload_phase3_iteration(
 
     uploaded_at = datetime.utcnow().isoformat()
 
-    manifest = _load_phase3_manifest(paper_id)
-    entries = [entry for entry in manifest.get("iterations", []) if entry.get("iteration") != iteration]
-    entry = {
-        "iteration": iteration,
-        "tex_filename": tex_filename,
-        "pdf_filename": pdf_filename,
-        "tex_url": f"/api/phase3-only/files/{paper_id}/{iteration:02d}/{tex_filename}",
-        "pdf_url": f"/api/phase3-only/files/{paper_id}/{iteration:02d}/{pdf_filename}",
-        "uploaded_at": uploaded_at,
-    }
-    entries.append(entry)
-    manifest["iterations"] = entries
-    _save_phase3_manifest(paper_id, manifest)
-
     return {
         "status": "success",
         "message": f"イテレーション{iteration}のファイルを保存しました",
-        "entry": entry,
+        "tex_path": str(tex_path.relative_to(phase3_only_dir)),
+        "pdf_path": str(pdf_path.relative_to(phase3_only_dir)),
+        "uploaded_at": uploaded_at,
     }
-
-
-@app.delete("/api/phase3-only/iterations/{paper_id}")
-async def reset_phase3_iterations(paper_id: str):
-    """アップロード済みのイテレーションを削除"""
-    session_dir = phase3_only_dir / paper_id
-    if session_dir.exists():
-        shutil.rmtree(session_dir)
-    return {"status": "success", "message": "アップロード済みのファイルを削除しました"}
-
-
-@app.get("/api/phase3-only/files/{paper_id}/{iteration}/{filename}")
-async def download_phase3_file(paper_id: str, iteration: str, filename: str):
-    """アップロード済みファイルをダウンロード"""
-    safe_name = Path(filename).name
-    iteration_dir = phase3_only_dir / paper_id / f"iteration_{iteration}"
-    file_path = iteration_dir / safe_name
-    if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="ファイルが見つかりません")
-    return FileResponse(file_path)
 
 
 @app.get("/api/papers")
