@@ -1,26 +1,27 @@
 """
-LLM応答パーサー
+LLM応答パーサー（Pydanticベース）
 LLMの応答から修正点を抽出する
 """
 
 import re
-from typing import List, Dict, Any, Optional
+import json
+from typing import List, Optional
+from pydantic import BaseModel, Field, field_validator
 
 
-class ProofreadingIssue:
-    """校正指摘の1件を表すクラス"""
+class ProofreadingIssue(BaseModel):
+    """校正指摘の1件を表すPydanticモデル"""
 
-    def __init__(
-        self,
-        issue_number: int,
-        before: str,
-        reasoning: str,
-        after: str,
-    ):
-        self.issue_number = issue_number
-        self.before = before
-        self.reasoning = reasoning
-        self.after = after
+    issue_number: int = Field(..., description="指摘番号")
+    before: str = Field(..., description="修正前の文", min_length=1)
+    reasoning: str = Field(..., description="根拠", min_length=1)
+    after: str = Field(..., description="修正後の文", min_length=1)
+
+    @field_validator('before', 'after', 'reasoning')
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        """前後の空白を削除"""
+        return v.strip()
 
     def __repr__(self):
         return (
@@ -31,8 +32,21 @@ class ProofreadingIssue:
         )
 
 
+class ProofreadingResponse(BaseModel):
+    """校正応答全体を表すPydanticモデル"""
+
+    issues: List[ProofreadingIssue] = Field(
+        default_factory=list,
+        description="指摘事項のリスト"
+    )
+    no_issues: bool = Field(
+        default=False,
+        description="指摘事項がないかどうか"
+    )
+
+
 class ResponseParser:
-    """LLM応答をパースするクラス"""
+    """LLM応答をパースするクラス（Pydantic対応）"""
 
     def parse_proofreading_response(self, response: str) -> List[ProofreadingIssue]:
         """
@@ -48,82 +62,132 @@ class ResponseParser:
         if "指摘事項はありません" in response:
             return []
 
+        # まずJSON形式でのパースを試みる（最も信頼性が高い）
+        issues = self._try_parse_json(response)
+        if issues:
+            return issues
+
+        # JSON失敗時は正規表現によるパースを試みる
+        issues = self._try_parse_with_regex(response)
+        return issues
+
+    def _try_parse_json(self, response: str) -> List[ProofreadingIssue]:
+        """
+        JSON形式でのパースを試みる
+
+        LLMがJSON形式で応答した場合、それを優先的に使用する
+        """
+        # JSONブロックを抽出（```json ... ``` または { ... }）
+        json_patterns = [
+            r'```json\s*(\{.*?\}|\[.*?\])\s*```',
+            r'```\s*(\{.*?\}|\[.*?\])\s*```',
+            r'(\{[\s\S]*?"issues"[\s\S]*?\})',
+            r'(\[[\s\S]*?\])',
+        ]
+
+        for pattern in json_patterns:
+            match = re.search(pattern, response, re.DOTALL)
+            if match:
+                try:
+                    json_str = match.group(1)
+                    data = json.loads(json_str)
+
+                    # データがリストの場合
+                    if isinstance(data, list):
+                        issues = []
+                        for i, item in enumerate(data, 1):
+                            # issue_numberがない場合は追加
+                            if 'issue_number' not in item:
+                                item['issue_number'] = i
+                            try:
+                                issues.append(ProofreadingIssue(**item))
+                            except Exception:
+                                continue
+                        if issues:
+                            return issues
+
+                    # データが辞書でissuesキーを持つ場合
+                    elif isinstance(data, dict):
+                        if 'issues' in data:
+                            issues = []
+                            for i, item in enumerate(data['issues'], 1):
+                                if 'issue_number' not in item:
+                                    item['issue_number'] = i
+                                try:
+                                    issues.append(ProofreadingIssue(**item))
+                                except Exception:
+                                    continue
+                            if issues:
+                                return issues
+                        # 単一の指摘の場合
+                        elif all(k in data for k in ['before', 'after', 'reasoning']):
+                            if 'issue_number' not in data:
+                                data['issue_number'] = 1
+                            try:
+                                return [ProofreadingIssue(**data)]
+                            except Exception:
+                                pass
+
+                except (json.JSONDecodeError, Exception):
+                    continue
+
+        return []
+
+    def _try_parse_with_regex(self, response: str) -> List[ProofreadingIssue]:
+        """
+        正規表現によるパース（フォールバック）
+
+        複数のパターンを試して、最も多くマッチしたものを採用
+        """
         issues = []
 
-        # パターン1: 修正前の文、根拠、修正後の文の順（箇条書きマーカー付き）
-        # * **修正前の文:**
-        # ```
-        # ...
-        # ```
-        # * **根拠:** ...
-        # * **修正後の文:**
-        # ```
-        # ...
-        # ```
-
-        # より柔軟なパターン: 箇条書きマーカー、コードブロック内の改行を考慮
-        # \s*```(?:\w+)?\s* で言語指定あり/なし両方に対応
-        # (.*?) で改行を含むコンテンツをキャプチャ（DOTALL モードで . が \n にマッチ）
+        # パターン1: 修正前の文、根拠、修正後の文（コードブロック付き、箇条書きマーカー付き）
         pattern1 = r'[*•\-]?\s*\*\*修正前の文:\*\*\s*```(?:\w+)?\s*(.*?)\s*```\s*[*•\-]?\s*\*\*根拠:\*\*\s*(.*?)\s*[*•\-]?\s*\*\*修正後の文:\*\*\s*```(?:\w+)?\s*(.*?)\s*```'
-
-        matches = list(re.finditer(pattern1, response, re.DOTALL))
-
-        issue_number = 1
-        for match in matches:
-            before = match.group(1).strip()
-            reasoning = match.group(2).strip()
-            after = match.group(3).strip()
-
-            if before and after:
-                issues.append(ProofreadingIssue(
-                    issue_number=issue_number,
-                    before=before,
-                    reasoning=reasoning,
-                    after=after,
-                ))
-                issue_number += 1
+        issues = self._extract_issues_with_pattern(pattern1, response)
+        if issues:
+            return issues
 
         # パターン2: 箇条書きマーカーなし
-        if not issues:
-            pattern2 = r'\*\*修正前の文:\*\*\s*```(?:\w+)?\s*(.*?)\s*```\s*\*\*根拠:\*\*\s*(.*?)\s*\*\*修正後の文:\*\*\s*```(?:\w+)?\s*(.*?)\s*```'
+        pattern2 = r'\*\*修正前の文:\*\*\s*```(?:\w+)?\s*(.*?)\s*```\s*\*\*根拠:\*\*\s*(.*?)\s*\*\*修正後の文:\*\*\s*```(?:\w+)?\s*(.*?)\s*```'
+        issues = self._extract_issues_with_pattern(pattern2, response)
+        if issues:
+            return issues
 
-            matches = list(re.finditer(pattern2, response, re.DOTALL))
+        # パターン3: コードブロックなし
+        pattern3 = r'(?:修正前|Before)[:：]\s*[`\n]*(.*?)[`\n]*\s*(?:根拠|理由|Reasoning)[:：]\s*(.*?)\s*(?:修正後|After)[:：]\s*[`\n]*(.*?)[`\n]*(?=\n\n|\Z)'
+        issues = self._extract_issues_with_pattern(pattern3, response)
+        if issues:
+            return issues
 
-            issue_number = 1
-            for match in matches:
+        return []
+
+    def _extract_issues_with_pattern(
+        self,
+        pattern: str,
+        response: str
+    ) -> List[ProofreadingIssue]:
+        """
+        指定されたパターンで指摘を抽出
+        """
+        matches = list(re.finditer(pattern, response, re.DOTALL | re.IGNORECASE))
+        issues = []
+
+        for i, match in enumerate(matches, 1):
+            try:
                 before = match.group(1).strip()
                 reasoning = match.group(2).strip()
                 after = match.group(3).strip()
 
                 if before and after:
-                    issues.append(ProofreadingIssue(
-                        issue_number=issue_number,
+                    issue = ProofreadingIssue(
+                        issue_number=i,
                         before=before,
                         reasoning=reasoning,
                         after=after,
-                    ))
-                    issue_number += 1
-
-        # パターン3: より柔軟なパターン（コードブロックなし）
-        if not issues:
-            pattern3 = r'(?:修正前|Before)[:：]\s*[`\n]*(.*?)[`\n]*\s*(?:根拠|理由|Reasoning)[:：]\s*(.*?)\s*(?:修正後|After)[:：]\s*[`\n]*(.*?)[`\n]*(?=\n\n|\Z)'
-
-            matches = list(re.finditer(pattern3, response, re.DOTALL | re.IGNORECASE))
-
-            issue_number = 1
-            for match in matches:
-                before = match.group(1).strip()
-                reasoning = match.group(2).strip()
-                after = match.group(3).strip()
-
-                if before and after:
-                    issues.append(ProofreadingIssue(
-                        issue_number=issue_number,
-                        before=before,
-                        reasoning=reasoning,
-                        after=after,
-                    ))
-                    issue_number += 1
+                    )
+                    issues.append(issue)
+            except Exception:
+                continue
 
         return issues
 
@@ -157,8 +221,8 @@ def test_parser():
     """パーサーのテスト"""
     parser = ResponseParser()
 
-    # テスト用の応答
-    test_response = """
+    # テスト1: Markdown形式の応答
+    test_response_1 = """
 以下の修正点があります。
 
 **修正前の文:**
@@ -182,10 +246,43 @@ We use the novel approach.
 ```
 """
 
-    issues = parser.parse_proofreading_response(test_response)
+    print("=== Test 1: Markdown形式 ===")
+    issues = parser.parse_proofreading_response(test_response_1)
     parser.display_issues(issues)
+    print(f"解析された指摘数: {len(issues)}\n")
 
-    print(f"\n解析された指摘数: {len(issues)}")
+    # テスト2: JSON形式の応答
+    test_response_2 = """
+```json
+{
+    "issues": [
+        {
+            "before": "The data is analyzed using machine learning.",
+            "reasoning": "主語が複数形の場合、動詞も複数形にすべきです。",
+            "after": "The data are analyzed using machine learning."
+        },
+        {
+            "before": "We use a novel approach.",
+            "reasoning": "冠詞が不適切です。",
+            "after": "We use the novel approach."
+        }
+    ]
+}
+```
+"""
+
+    print("=== Test 2: JSON形式 ===")
+    issues = parser.parse_proofreading_response(test_response_2)
+    parser.display_issues(issues)
+    print(f"解析された指摘数: {len(issues)}\n")
+
+    # テスト3: 指摘なし
+    test_response_3 = "指摘事項はありません。"
+
+    print("=== Test 3: 指摘なし ===")
+    issues = parser.parse_proofreading_response(test_response_3)
+    parser.display_issues(issues)
+    print(f"解析された指摘数: {len(issues)}\n")
 
 
 if __name__ == "__main__":

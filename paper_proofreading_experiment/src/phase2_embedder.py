@@ -1,14 +1,17 @@
 """
-フェーズ2: 誤り埋め込みモジュール
+フェーズ2: 誤り埋め込みモジュール（Pydanticベース）
 意図的な誤りをチェックリストに基づいて論文に埋め込む
 """
 
 import json
 import re
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from pydantic import ValidationError
+
 from llm_client import LLMClient
 from data_manager import DataManager
+from embedded_error_models import EmbeddedError, EmbeddingResponse
 
 
 class Phase2Embedder:
@@ -137,13 +140,89 @@ class Phase2Embedder:
 
     def _parse_errors_from_response(self, response: str) -> List[Dict[str, Any]]:
         """
-        LLMの応答からJSON形式の誤りリストを抽出
+        LLMの応答からJSON形式の誤りリストを抽出（Pydanticベース）
 
         Args:
             response: LLMの応答テキスト
 
         Returns:
-            誤りのリスト
+            誤りのリスト（辞書形式）
+        """
+        # まずPydanticモデルでパースを試みる
+        errors = self._try_parse_with_pydantic(response)
+        if errors:
+            # Pydanticモデルを辞書に変換して返す
+            return [error.model_dump() for error in errors]
+
+        # Pydantic失敗時はレガシーのJSONパースを試みる
+        return self._try_parse_json_legacy(response)
+
+    def _try_parse_with_pydantic(self, response: str) -> List[EmbeddedError]:
+        """
+        Pydanticモデルを使ってパース
+
+        Args:
+            response: LLMの応答テキスト
+
+        Returns:
+            EmbeddedErrorのリスト
+        """
+        # JSONブロックを抽出（```json ... ``` または { ... } を探す）
+        json_patterns = [
+            r"```json\s*(\{.*?\}|\[.*?\])\s*```",
+            r"```\s*(\{.*?\}|\[.*?\])\s*```",
+            r"(\{[\s\S]*\"errors\"[\s\S]*?\})",
+            r"(\[[\s\S]*?\])",
+        ]
+
+        for pattern in json_patterns:
+            match = re.search(pattern, response, re.DOTALL)
+            if match:
+                try:
+                    json_str = match.group(1)
+                    data = json.loads(json_str)
+
+                    # データがリストの場合
+                    if isinstance(data, list):
+                        errors = []
+                        for i, item in enumerate(data, 1):
+                            if 'error_id' not in item:
+                                item['error_id'] = i
+                            try:
+                                errors.append(EmbeddedError(**item))
+                            except ValidationError:
+                                continue
+                        if errors:
+                            return errors
+
+                    # データが辞書でerrorsキーを持つ場合
+                    elif isinstance(data, dict):
+                        if 'errors' in data:
+                            errors = []
+                            for i, item in enumerate(data['errors'], 1):
+                                if 'error_id' not in item:
+                                    item['error_id'] = i
+                                try:
+                                    errors.append(EmbeddedError(**item))
+                                except ValidationError:
+                                    continue
+                            if errors:
+                                return errors
+
+                except (json.JSONDecodeError, ValidationError):
+                    continue
+
+        return []
+
+    def _try_parse_json_legacy(self, response: str) -> List[Dict[str, Any]]:
+        """
+        レガシーのJSONパース（フォールバック）
+
+        Args:
+            response: LLMの応答テキスト
+
+        Returns:
+            誤りのリスト（辞書形式）
         """
         # JSONブロックを抽出（```json ... ``` または { ... } を探す）
         json_patterns = [
