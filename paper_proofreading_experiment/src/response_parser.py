@@ -135,15 +135,12 @@ class ResponseParser:
 
                         # 単一の指摘の場合
                         elif all(k in data for k in ['before', 'after', 'reasoning']):
-                            if 'issue_number' not in data:
-                                data['issue_number'] = 1
-                            try:
+                            issues = self._build_issue_models([data])
+                            if issues:
                                 return ProofreadingParseResult(
-                                    issues=[ProofreadingIssue(**data)],
+                                    issues=issues,
                                     no_issues=False,
                                 )
-                            except Exception:
-                                pass
 
                     except Exception:
                         continue
