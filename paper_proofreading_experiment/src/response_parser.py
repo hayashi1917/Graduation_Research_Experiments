@@ -6,7 +6,7 @@ LLMの応答から修正点を抽出する
 import ast
 import re
 import json
-from typing import Any, List, Optional
+from typing import Any, Iterable, List, Mapping, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -102,15 +102,7 @@ class ResponseParser:
 
                 # データがリストの場合
                 if isinstance(data, list):
-                    issues = []
-                    for i, item in enumerate(data, 1):
-                        # issue_numberがない場合は追加
-                        if 'issue_number' not in item:
-                            item['issue_number'] = i
-                        try:
-                            issues.append(ProofreadingIssue(**item))
-                        except Exception:
-                            continue
+                    issues = self._build_issue_models(data)
                     return ProofreadingParseResult(
                         issues=issues,
                         no_issues=len(issues) == 0,
@@ -127,14 +119,7 @@ class ResponseParser:
                                 return ProofreadingParseResult(issues=[], no_issues=True)
                             # no_issues: false の場合、issuesを処理
                             elif 'issues' in data:
-                                issues = []
-                                for i, item in enumerate(data['issues'], 1):
-                                    if 'issue_number' not in item:
-                                        item['issue_number'] = i
-                                    try:
-                                        issues.append(ProofreadingIssue(**item))
-                                    except Exception:
-                                        continue
+                                issues = self._build_issue_models(data['issues'])
                                 return ProofreadingParseResult(
                                     issues=issues,
                                     no_issues=False,
@@ -142,14 +127,7 @@ class ResponseParser:
 
                         # issuesキーがある場合（no_issuesフィールドなし）
                         elif 'issues' in data:
-                            issues = []
-                            for i, item in enumerate(data['issues'], 1):
-                                if 'issue_number' not in item:
-                                    item['issue_number'] = i
-                                try:
-                                    issues.append(ProofreadingIssue(**item))
-                                except Exception:
-                                    continue
+                            issues = self._build_issue_models(data['issues'])
                             return ProofreadingParseResult(
                                 issues=issues,
                                 no_issues=len(issues) == 0,
@@ -171,6 +149,26 @@ class ResponseParser:
                         continue
 
         return None  # パース失敗
+
+    def _build_issue_models(
+        self,
+        raw_items: Iterable[Mapping[str, Any]]
+    ) -> List[ProofreadingIssue]:
+        """Dictの配列からProofreadingIssueリストを生成"""
+
+        issues: List[ProofreadingIssue] = []
+        for idx, raw in enumerate(raw_items, 1):
+            if not isinstance(raw, Mapping):
+                continue
+
+            normalized = dict(raw)
+            normalized.setdefault('issue_number', idx)
+            try:
+                issues.append(ProofreadingIssue(**normalized))
+            except Exception:
+                continue
+
+        return issues
 
     def _loads_json_lenient(self, json_candidate: str) -> Optional[Any]:
         """多少フォーマットが崩れたJSONライクな文字列を解析"""
