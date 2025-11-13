@@ -112,12 +112,13 @@ class Phase3Proofreader:
 
             print(f"\n✓ LLMの応答を受信しました")
 
-            # 「指摘事項はありません」が含まれているか確認
-            if "指摘事項はありません" in response:
+            # 応答を解析して指摘/完了状態を判定
+            parse_result = self.parser.parse_proofreading_response(response)
+
+            if parse_result.no_issues:
                 print("✓ 校正完了（指摘事項なし）")
                 stopped_reason = "no_issues"
 
-                # イテレーションログを記録
                 self.data_manager.record_iteration(
                     paper_id=paper_id,
                     phase="phase3",
@@ -130,8 +131,7 @@ class Phase3Proofreader:
                 )
                 break
 
-            # 応答をパースして指摘を抽出
-            issues = self.parser.parse_proofreading_response(response)
+            issues = parse_result.issues
 
             # 指摘が1つもない場合（パース失敗の可能性）
             if not issues:

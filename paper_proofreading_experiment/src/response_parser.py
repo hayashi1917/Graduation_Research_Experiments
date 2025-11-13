@@ -32,23 +32,23 @@ class ProofreadingIssue(BaseModel):
         )
 
 
-class ProofreadingResponse(BaseModel):
-    """校正応答全体を表すPydanticモデル"""
+class ProofreadingParseResult(BaseModel):
+    """パース結果を保持するモデル"""
 
     issues: List[ProofreadingIssue] = Field(
         default_factory=list,
-        description="指摘事項のリスト"
+        description="抽出された指摘事項"
     )
     no_issues: bool = Field(
         default=False,
-        description="指摘事項がないかどうか"
+        description="LLM応答が指摘なしと判断されたか"
     )
 
 
 class ResponseParser:
     """LLM応答をパースするクラス（Pydantic対応）"""
 
-    def parse_proofreading_response(self, response: str) -> List[ProofreadingIssue]:
+    def parse_proofreading_response(self, response: str) -> ProofreadingParseResult:
         """
         校正応答をパースして修正点のリストを返す
 
@@ -56,25 +56,31 @@ class ResponseParser:
             response: LLMの応答テキスト
 
         Returns:
-            ProofreadingIssueのリスト
+            ProofreadingParseResult
         """
         # まずJSON形式でのパースを試みる（最も信頼性が高い）
-        issues = self._try_parse_json(response)
-        if issues is not None:  # Noneの場合のみフォールバック
-            return issues
+        json_result = self._try_parse_json(response)
+        if json_result is not None:  # Noneの場合のみフォールバック
+            return json_result
 
         # JSON失敗時は正規表現によるパースを試みる（レガシー互換性のため）
         issues = self._try_parse_with_regex(response)
-        return issues
+        if issues:
+            return ProofreadingParseResult(issues=issues, no_issues=False)
 
-    def _try_parse_json(self, response: str) -> Optional[List[ProofreadingIssue]]:
+        return ProofreadingParseResult(
+            issues=[],
+            no_issues=self._detect_no_issue_phrase(response)
+        )
+
+    def _try_parse_json(self, response: str) -> Optional[ProofreadingParseResult]:
         """
         JSON形式でのパースを試みる
 
         LLMがJSON形式で応答した場合、それを優先的に使用する
 
         Returns:
-            ProofreadingIssueのリスト、またはパース失敗時はNone
+            ProofreadingParseResult、またはパース失敗時はNone
         """
         # JSONブロックを抽出（```json ... ``` または { ... }）
         json_patterns = [
@@ -103,17 +109,20 @@ class ResponseParser:
                                 issues.append(ProofreadingIssue(**item))
                             except Exception:
                                 continue
-                        return issues  # 空リストでも返す
+                        return ProofreadingParseResult(
+                            issues=issues,
+                            no_issues=len(issues) == 0,
+                        )
 
                     # データが辞書の場合
                     elif isinstance(data, dict):
-                        # ProofreadingResponseモデルを使ってパース
+                        # Pydanticモデルを使ってパース
                         try:
                             # no_issuesフラグがある場合
                             if 'no_issues' in data:
                                 if data['no_issues'] is True:
                                     # 修正点なし
-                                    return []
+                                    return ProofreadingParseResult(issues=[], no_issues=True)
                                 # no_issues: false の場合、issuesを処理
                                 elif 'issues' in data:
                                     issues = []
@@ -124,7 +133,10 @@ class ResponseParser:
                                             issues.append(ProofreadingIssue(**item))
                                         except Exception:
                                             continue
-                                    return issues
+                                    return ProofreadingParseResult(
+                                        issues=issues,
+                                        no_issues=False,
+                                    )
 
                             # issuesキーがある場合（no_issuesフィールドなし）
                             elif 'issues' in data:
@@ -136,14 +148,20 @@ class ResponseParser:
                                         issues.append(ProofreadingIssue(**item))
                                     except Exception:
                                         continue
-                                return issues
+                                return ProofreadingParseResult(
+                                    issues=issues,
+                                    no_issues=len(issues) == 0,
+                                )
 
                             # 単一の指摘の場合
                             elif all(k in data for k in ['before', 'after', 'reasoning']):
                                 if 'issue_number' not in data:
                                     data['issue_number'] = 1
                                 try:
-                                    return [ProofreadingIssue(**data)]
+                                    return ProofreadingParseResult(
+                                        issues=[ProofreadingIssue(**data)],
+                                        no_issues=False,
+                                    )
                                 except Exception:
                                     pass
 
@@ -154,6 +172,20 @@ class ResponseParser:
                     continue
 
         return None  # パース失敗
+
+    def _detect_no_issue_phrase(self, response: str) -> bool:
+        """テキストから指摘なしのメッセージを検出"""
+        normalized = response.lower()
+        phrases = [
+            "指摘事項はありません",
+            "指摘はありません",
+            "問題は検出されません",
+            "no issues",
+            "no issue",
+            '"no_issues"\s*:\s*true',
+        ]
+
+        return any(re.search(phrase, normalized) for phrase in phrases)
 
     def _try_parse_with_regex(self, response: str) -> List[ProofreadingIssue]:
         """
@@ -269,9 +301,9 @@ We use the novel approach.
 """
 
     print("=== Test 1: Markdown形式 ===")
-    issues = parser.parse_proofreading_response(test_response_1)
-    parser.display_issues(issues)
-    print(f"解析された指摘数: {len(issues)}\n")
+    result = parser.parse_proofreading_response(test_response_1)
+    parser.display_issues(result.issues)
+    print(f"解析された指摘数: {len(result.issues)}\n")
 
     # テスト2: JSON形式の応答
     test_response_2 = """
@@ -294,17 +326,17 @@ We use the novel approach.
 """
 
     print("=== Test 2: JSON形式 ===")
-    issues = parser.parse_proofreading_response(test_response_2)
-    parser.display_issues(issues)
-    print(f"解析された指摘数: {len(issues)}\n")
+    result = parser.parse_proofreading_response(test_response_2)
+    parser.display_issues(result.issues)
+    print(f"解析された指摘数: {len(result.issues)}\n")
 
     # テスト3: 指摘なし
     test_response_3 = "指摘事項はありません。"
 
     print("=== Test 3: 指摘なし ===")
-    issues = parser.parse_proofreading_response(test_response_3)
-    parser.display_issues(issues)
-    print(f"解析された指摘数: {len(issues)}\n")
+    result = parser.parse_proofreading_response(test_response_3)
+    parser.display_issues(result.issues)
+    print(f"解析された指摘数: {len(result.issues)} / 指摘なし: {result.no_issues}\n")
 
 
 if __name__ == "__main__":

@@ -84,12 +84,16 @@ print("\n" + "="*70)
 print("ResponseParser.parse_proofreading_response() の結果:")
 print("="*70)
 
-issues = parser.parse_proofreading_response(test_response)
+parse_result = parser.parse_proofreading_response(test_response)
+issues = parse_result.issues
 
 print(f"\n抽出された指摘数: {len(issues)}")
+print(f"指摘なしフラグ: {parse_result.no_issues}")
 
 if issues:
     parser.display_issues(issues)
+elif parse_result.no_issues:
+    print("LLM応答は指摘なしと判断されました。")
 else:
     print("指摘が抽出されませんでした。")
 

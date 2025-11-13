@@ -188,8 +188,10 @@ class WebSocketPhase1Adapter:
                 "message": "LLMの応答を受信しました",
             })
 
-            # 「指摘事項はありません」が含まれているか確認
-            if "指摘事項はありません" in response:
+            # 応答をパースして指摘を抽出
+            parse_result = self.parser.parse_proofreading_response(response)
+
+            if parse_result.no_issues:
                 await websocket.send_json({
                     "type": "log",
                     "message": "クリーン化完了（指摘事項なし）",
@@ -214,8 +216,7 @@ class WebSocketPhase1Adapter:
                 self.data_manager.clear_progress(paper_id, "phase1")
                 break
 
-            # 応答をパースして指摘を抽出
-            issues = self.parser.parse_proofreading_response(response)
+            issues = parse_result.issues
 
             # 指摘が1つもない場合
             if not issues:
@@ -715,7 +716,9 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                 "message": "LLMの応答を受信しました",
             })
 
-            if "指摘事項はありません" in response:
+            parse_result = self.parser.parse_proofreading_response(response)
+
+            if parse_result.no_issues:
                 await websocket.send_json({
                     "type": "log",
                     "message": "校正完了（指摘事項なし）",
@@ -740,7 +743,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                 self.data_manager.clear_progress(paper_id, phase)
                 break
 
-            issues = self.parser.parse_proofreading_response(response)
+            issues = parse_result.issues
 
             if not issues:
                 await websocket.send_json({
