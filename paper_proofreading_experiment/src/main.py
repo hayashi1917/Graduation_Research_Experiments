@@ -84,16 +84,13 @@ def main():
 
     # 論文ファイルのパスを確認
     pdf_path = paper_dir / f"{args.paper_id}.pdf"
-    tex_path = paper_dir / f"{args.paper_id}.tex"
 
-    if not pdf_path.exists() or not tex_path.exists():
+    if not pdf_path.exists():
         print(f"エラー: 論文ファイルが見つかりません。")
         print(f"  PDF: {pdf_path}")
-        print(f"  TeX: {tex_path}")
         print(f"\n以下のディレクトリ構造を確認してください:")
         print(f"  {paper_dir}/")
-        print(f"    ├── {args.paper_id}.pdf")
-        print(f"    └── {args.paper_id}.tex")
+        print(f"    └── {args.paper_id}.pdf")
         sys.exit(1)
 
     # 設定を読み込む
@@ -149,7 +146,6 @@ def main():
         result = cleaner.run(
             paper_id=args.paper_id,
             pdf_path=pdf_path,
-            tex_path=tex_path,
         )
 
         print(f"\nフェーズ1完了:")
@@ -186,7 +182,6 @@ def main():
         result = embedder.run(
             paper_id=args.paper_id,
             pdf_path=pdf_path,
-            tex_path=tex_path,
         )
 
         print(f"\nフェーズ2完了:")
@@ -219,7 +214,6 @@ def main():
         result = proofreader.run(
             paper_id=args.paper_id,
             pdf_path=pdf_path,
-            tex_path=tex_path,
         )
 
         print(f"\nフェーズ3完了:")

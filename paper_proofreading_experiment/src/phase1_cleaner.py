@@ -45,7 +45,6 @@ class Phase1Cleaner:
         self,
         paper_id: str,
         pdf_path: Path,
-        tex_path: Path,
     ) -> Dict[str, Any]:
         """
         クリーン化を実行
@@ -53,7 +52,6 @@ class Phase1Cleaner:
         Args:
             paper_id: 論文ID
             pdf_path: PDFファイルのパス
-            tex_path: TeXファイルのパス
 
         Returns:
             実行結果（反復回数、停止理由など）
@@ -88,7 +86,6 @@ class Phase1Cleaner:
                 paper_id=paper_id,
                 phase="phase1",
                 iteration=iteration,
-                tex_path=tex_path,
                 pdf_path=pdf_path,
             )
 
@@ -97,7 +94,6 @@ class Phase1Cleaner:
             response = self.llm_client.call(
                 prompt=prompt,
                 pdf_path=pdf_path,
-                tex_path=tex_path,
             )
 
             # プロンプトと応答を保存

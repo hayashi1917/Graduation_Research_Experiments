@@ -44,7 +44,6 @@ class Phase3Proofreader:
         self,
         paper_id: str,
         pdf_path: Path,
-        tex_path: Path,
     ) -> Dict[str, Any]:
         """
         校正実験を実行
@@ -52,7 +51,6 @@ class Phase3Proofreader:
         Args:
             paper_id: 論文ID
             pdf_path: PDFファイルのパス
-            tex_path: TeXファイルのパス
 
         Returns:
             実行結果（反復回数、検出された誤り数など）
@@ -88,7 +86,6 @@ class Phase3Proofreader:
                 paper_id=paper_id,
                 phase="phase3",
                 iteration=iteration,
-                tex_path=tex_path,
                 pdf_path=pdf_path,
             )
 
@@ -97,7 +94,6 @@ class Phase3Proofreader:
             response = self.llm_client.call(
                 prompt=prompt,
                 pdf_path=pdf_path,
-                tex_path=tex_path,
             )
 
             # プロンプトと応答を保存
@@ -156,10 +152,8 @@ class Phase3Proofreader:
             self.parser.display_issues(issues)
 
             print("\n各指摘について判断してください:")
-            print("  [A] 適用: 正しい指摘なので反映（自動適用）")
-            print("  [M] 手動: 手動で修正")
+            print("  [A] 承認: 正しい指摘として記録")
             print("  [S] スキップ: 誤検出")
-            print("  [D] 判断困難: 内容理解が必要（該当項目を除外）")
             print("  [Q] 中断: 校正を中断")
 
             # インタラクティブな判断
@@ -174,54 +168,14 @@ class Phase3Proofreader:
                 print(f"修正後: {issue.after[:100]}...")
                 print(f"{'='*60}")
 
-                action = input("\n[A]自動適用 / [M]手動 / [S]スキップ / [D]判断困難 / [Q]中断: ").strip().upper()
+                action = input("\n[A]承認 / [S]スキップ / [Q]中断: ").strip().upper()
 
                 if action == "A":
-                    print("→ 自動適用します...")
-
-                    # TeXファイルに修正を適用
-                    success = self.paper_manager.apply_correction(
-                        tex_path=tex_path,
-                        before_text=issue.before,
-                        after_text=issue.after,
-                        backup=True,
-                    )
-
-                    if success:
-                        detected_in_iteration.append(f"issue_{issue.issue_number}_auto")
-                        print("✓ 修正を適用しました")
-                    else:
-                        print("⚠ 自動適用に失敗しました。手動で修正してください。")
-                        input("修正完了後、Enter キーを押してください...")
-                        detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
-
-                elif action == "M":
-                    print("→ 手動で修正してください。")
-                    print(f"\n修正前: {issue.before}")
-                    print(f"修正後: {issue.after}")
-                    input("\n修正完了後、Enter キーを押してください...")
-                    detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
+                    print("→ 正しい指摘として記録します。")
+                    detected_in_iteration.append(f"issue_{issue.issue_number}_accepted")
 
                 elif action == "S":
                     print("→ スキップします（誤検出として記録）。")
-
-                elif action == "D":
-                    print("→ 判断困難として記録し、該当項目を除外します。")
-
-                    # チェックリスト項目を入力
-                    item = input("除外するチェックリスト項目名: ").strip()
-                    reason = input("除外理由（短く）: ").strip()
-
-                    new_excluded.append(item)
-                    excluded_items.append(item)
-
-                    # 除外項目を記録
-                    self.data_manager.record_excluded_item(
-                        paper_id=paper_id,
-                        checklist_item=item,
-                        reason=reason,
-                        example_case=f"phase3_iteration_{iteration}_issue{issue.issue_number}",
-                    )
 
                 elif action == "Q":
                     print("\n校正を中断します。")

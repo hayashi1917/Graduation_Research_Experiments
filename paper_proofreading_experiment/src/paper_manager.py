@@ -27,8 +27,7 @@ class PaperManager:
         paper_id: str,
         phase: str,
         iteration: int,
-        tex_path: Path,
-        pdf_path: Optional[Path] = None,
+        pdf_path: Path,
     ):
         """
         現在の論文ファイルをバージョンとして保存
@@ -37,8 +36,7 @@ class PaperManager:
             paper_id: 論文ID
             phase: フェーズ名
             iteration: イテレーション番号
-            tex_path: TeXファイルのパス
-            pdf_path: PDFファイルのパス（オプション）
+            pdf_path: PDFファイルのパス
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         version_name = f"{phase}_iter{iteration}_{timestamp}"
@@ -46,66 +44,18 @@ class PaperManager:
         version_dir = self.versions_dir / paper_id / version_name
         version_dir.mkdir(parents=True, exist_ok=True)
 
-        # TeXファイルをコピー
-        if tex_path.exists():
-            shutil.copy2(tex_path, version_dir / tex_path.name)
-
-        # PDFファイルをコピー（存在する場合）
+        # PDFファイルをコピー
         if pdf_path and pdf_path.exists():
             shutil.copy2(pdf_path, version_dir / pdf_path.name)
 
         print(f"✓ バージョンを保存しました: {version_dir}")
 
-    def apply_correction(
-        self,
-        tex_path: Path,
-        before_text: str,
-        after_text: str,
-        backup: bool = True,
-    ) -> bool:
-        """
-        TeXファイルに修正を適用
-
-        Args:
-            tex_path: TeXファイルのパス
-            before_text: 修正前のテキスト
-            after_text: 修正後のテキスト
-            backup: バックアップを作成するか
-
-        Returns:
-            修正が成功したかどうか
-        """
-        # ファイルを読み込む
-        with open(tex_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        # 修正前のテキストが存在するか確認
-        if before_text not in content:
-            print(f"⚠ 修正前のテキストが見つかりません:")
-            print(f"  探しているテキスト: {before_text[:100]}...")
-            return False
-
-        # バックアップを作成
-        if backup:
-            backup_path = tex_path.with_suffix(".tex.bak")
-            shutil.copy2(tex_path, backup_path)
-
-        # テキストを置換
-        new_content = content.replace(before_text, after_text, 1)
-
-        # ファイルに書き込む
-        with open(tex_path, "w", encoding="utf-8") as f:
-            f.write(new_content)
-
-        print(f"✓ 修正を適用しました")
-        return True
 
     def restore_version(
         self,
         paper_id: str,
         version_name: str,
-        tex_path: Path,
-        pdf_path: Optional[Path] = None,
+        pdf_path: Path,
     ):
         """
         指定されたバージョンに復元
@@ -113,8 +63,7 @@ class PaperManager:
         Args:
             paper_id: 論文ID
             version_name: バージョン名
-            tex_path: 復元先のTeXファイルパス
-            pdf_path: 復元先のPDFファイルパス（オプション）
+            pdf_path: 復元先のPDFファイルパス
         """
         version_dir = self.versions_dir / paper_id / version_name
 
@@ -122,18 +71,11 @@ class PaperManager:
             print(f"⚠ バージョンが見つかりません: {version_dir}")
             return
 
-        # TeXファイルを復元
-        version_tex = version_dir / tex_path.name
-        if version_tex.exists():
-            shutil.copy2(version_tex, tex_path)
-            print(f"✓ TeXファイルを復元しました")
-
-        # PDFファイルを復元（存在する場合）
-        if pdf_path:
-            version_pdf = version_dir / pdf_path.name
-            if version_pdf.exists():
-                shutil.copy2(version_pdf, pdf_path)
-                print(f"✓ PDFファイルを復元しました")
+        # PDFファイルを復元
+        version_pdf = version_dir / pdf_path.name
+        if version_pdf.exists():
+            shutil.copy2(version_pdf, pdf_path)
+            print(f"✓ PDFファイルを復元しました")
 
     def list_versions(self, paper_id: str):
         """
@@ -169,9 +111,9 @@ if __name__ == "__main__":
     test_paper_dir.mkdir(exist_ok=True)
     test_versions_dir.mkdir(exist_ok=True)
 
-    # テスト用のTeXファイルを作成
-    test_tex = test_paper_dir / "test.tex"
-    test_tex.write_text("The data is analyzed.")
+    # テスト用のPDFファイルを作成（ダミー）
+    test_pdf = test_paper_dir / "test.pdf"
+    test_pdf.write_bytes(b"%PDF-1.4 test")
 
     # PaperManagerを初期化
     pm = PaperManager(test_paper_dir, test_versions_dir)
@@ -181,17 +123,8 @@ if __name__ == "__main__":
         paper_id="test001",
         phase="phase1",
         iteration=1,
-        tex_path=test_tex,
+        pdf_path=test_pdf,
     )
-
-    # 修正を適用
-    pm.apply_correction(
-        tex_path=test_tex,
-        before_text="The data is analyzed.",
-        after_text="The data are analyzed.",
-    )
-
-    print(f"\n修正後の内容: {test_tex.read_text()}")
 
     # バージョンをリスト
     pm.list_versions("test001")

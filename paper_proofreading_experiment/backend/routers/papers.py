@@ -23,13 +23,11 @@ async def get_papers():
         for paper_dir in papers_dir.iterdir():
             if paper_dir.is_dir():
                 pdf_files = list(paper_dir.glob("*.pdf"))
-                tex_files = list(paper_dir.glob("*.tex"))
-                if pdf_files and tex_files:
+                if pdf_files:
                     papers.append(
                         PaperInfo(
                             id=paper_dir.name,
-                            pdf=pdf_files[0].name,
-                            tex=tex_files[0].name
+                            pdf=pdf_files[0].name
                         )
                     )
 
@@ -39,8 +37,7 @@ async def get_papers():
 @router.post("/upload")
 async def upload_paper(
     paper_id: str = Form(...),
-    pdf_file: UploadFile = File(...),
-    tex_file: UploadFile = File(...)
+    pdf_file: UploadFile = File(...)
 ):
     """Upload a new paper"""
     paper_manager = get_paper_manager()
@@ -53,19 +50,12 @@ async def upload_paper(
         with pdf_path.open("wb") as buffer:
             shutil.copyfileobj(pdf_file.file, buffer)
 
-        # Save TeX file
-        tex_path = paper_manager.paper_dir / paper_id / f"{paper_id}.tex"
-
-        with tex_path.open("wb") as buffer:
-            shutil.copyfileobj(tex_file.file, buffer)
-
         return JSONResponse({
             "success": True,
             "message": f"論文 {paper_id} をアップロードしました",
             "paper": {
                 "id": paper_id,
-                "pdf": str(pdf_path),
-                "tex": str(tex_path)
+                "pdf": str(pdf_path)
             }
         })
 
@@ -83,13 +73,11 @@ async def get_paper_info(paper_id: str):
         raise HTTPException(status_code=404, detail=f"Paper {paper_id} not found")
 
     pdf_files = list(paper_dir.glob("*.pdf"))
-    tex_files = list(paper_dir.glob("*.tex"))
 
-    if not pdf_files or not tex_files:
+    if not pdf_files:
         raise HTTPException(status_code=404, detail=f"Paper files not found for {paper_id}")
 
     return PaperInfo(
         id=paper_id,
-        pdf=pdf_files[0].name,
-        tex=tex_files[0].name
+        pdf=pdf_files[0].name
     )
