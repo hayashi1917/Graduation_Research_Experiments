@@ -365,7 +365,7 @@ async def execute_phase(paper_id: str, phase: str, websocket: WebSocket, client_
             if not api_key:
                 raise ValueError("環境変数 GEMINI_API_KEY が設定されていません")
             llm_client = GeminiClient(model=model, api_key=api_key, temperature=temperature)
-        elif provider == "anthropic":
+        elif provider in ["anthropic", "claude"]:
             api_key = os.getenv("ANTHROPIC_API_KEY")
             if not api_key:
                 raise ValueError("環境変数 ANTHROPIC_API_KEY が設定されていません")
