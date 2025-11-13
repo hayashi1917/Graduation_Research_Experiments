@@ -22,7 +22,6 @@ class LLMClient:
         self,
         prompt: str,
         pdf_path: Optional[Path] = None,
-        tex_path: Optional[Path] = None,
         system_prompt: Optional[str] = None,
     ) -> str:
         """
@@ -31,7 +30,6 @@ class LLMClient:
         Args:
             prompt: プロンプトテキスト
             pdf_path: PDFファイルのパス（オプション）
-            tex_path: TeXファイルのパス（オプション）
             system_prompt: システムプロンプト（オプション）
 
         Returns:
@@ -62,7 +60,6 @@ class GeminiClient(LLMClient):
         self,
         prompt: str,
         pdf_path: Optional[Path] = None,
-        tex_path: Optional[Path] = None,
         system_prompt: Optional[str] = None,
     ) -> str:
         """Gemini APIを呼び出す"""
@@ -91,12 +88,6 @@ class GeminiClient(LLMClient):
                 "data": pdf_data,
             }
             contents.append(pdf_part)
-
-        # TeXファイルを追加
-        if tex_path and tex_path.exists():
-            with open(tex_path, "r", encoding="utf-8") as f:
-                tex_content = f.read()
-            contents.append(f"\n\n# TeXソースコード\n\n```latex\n{tex_content}\n```\n\n")
 
         # プロンプトを追加
         contents.append(prompt)
@@ -128,7 +119,6 @@ class ClaudeClient(LLMClient):
         self,
         prompt: str,
         pdf_path: Optional[Path] = None,
-        tex_path: Optional[Path] = None,
         system_prompt: Optional[str] = None,
     ) -> str:
         """Claude APIを呼び出す"""
@@ -150,17 +140,10 @@ class ClaudeClient(LLMClient):
                 },
             })
 
-        # TeXファイルを追加
-        tex_content_text = ""
-        if tex_path and tex_path.exists():
-            with open(tex_path, "r", encoding="utf-8") as f:
-                tex_content = f.read()
-            tex_content_text = f"\n\n# TeXソースコード\n\n```latex\n{tex_content}\n```\n\n"
-
         # プロンプトを追加
         content.append({
             "type": "text",
-            "text": tex_content_text + prompt,
+            "text": prompt,
         })
 
         # APIを呼び出す

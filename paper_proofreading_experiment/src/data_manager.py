@@ -789,7 +789,6 @@ class DataManager:
             "iterations": 0,
             "excluded_items": [],
             "status": status,
-            "final_tex_path": "",
             "final_pdf_path": "",
         }
 
@@ -803,7 +802,6 @@ class DataManager:
         iterations: int = 0,
         excluded_items: List[str] = None,
         status: str = "",
-        final_tex_path: str = "",
         final_pdf_path: str = "",
     ):
         """Phase1セッション情報を更新
@@ -814,7 +812,6 @@ class DataManager:
             iterations: イテレーション数
             excluded_items: 除外項目リスト
             status: ステータス
-            final_tex_path: 最終TeXファイルのパス
             final_pdf_path: 最終PDFファイルのパス
         """
         sessions_data = self._safe_load_json(self.phase1_sessions_file, default={})
@@ -832,8 +829,6 @@ class DataManager:
             sessions_data[phase1_id]["excluded_items"] = excluded_items
         if status:
             sessions_data[phase1_id]["status"] = status
-        if final_tex_path:
-            sessions_data[phase1_id]["final_tex_path"] = final_tex_path
         if final_pdf_path:
             sessions_data[phase1_id]["final_pdf_path"] = final_pdf_path
 

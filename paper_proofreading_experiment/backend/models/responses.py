@@ -10,7 +10,6 @@ class PaperInfo(BaseModel):
     """Paper information"""
     id: str
     pdf: str
-    tex: str
 
 
 class Phase1SessionInfo(BaseModel):
@@ -22,7 +21,6 @@ class Phase1SessionInfo(BaseModel):
     iterations: int = 0
     excluded_items: List[str] = []
     status: str = "in_progress"  # in_progress, completed, aborted
-    final_tex_path: str = ""
     final_pdf_path: str = ""
 
 

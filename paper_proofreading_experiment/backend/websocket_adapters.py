@@ -48,7 +48,6 @@ class WebSocketPhase1Adapter:
         self,
         paper_id: str,
         pdf_path: Path,
-        tex_path: Path,
         websocket: WebSocket,
     ) -> Dict[str, Any]:
         """クリーン化を実行（WebSocket版）"""
@@ -125,7 +124,6 @@ class WebSocketPhase1Adapter:
                 paper_id=paper_id,
                 phase="phase1",
                 iteration=iteration,
-                tex_path=tex_path,
                 pdf_path=pdf_path,
             )
 
@@ -145,7 +143,6 @@ class WebSocketPhase1Adapter:
                 response = self.llm_client.call(
                     prompt=prompt,
                     pdf_path=pdf_path,
-                    tex_path=tex_path,
                 )
             except Exception as e:
                 llm_success = False
@@ -461,12 +458,10 @@ class WebSocketPhase1Adapter:
         final_version_dir = self.versions_dir / paper_id / "phase1" / phase1_id
         final_version_dir.mkdir(parents=True, exist_ok=True)
 
-        final_tex_path = final_version_dir / "final.tex"
         final_pdf_path = final_version_dir / "final.pdf"
 
-        # TeXファイルをコピー
+        # PDFファイルをコピー
         import shutil
-        shutil.copy2(tex_path, final_tex_path)
         if pdf_path.exists():
             shutil.copy2(pdf_path, final_pdf_path)
 
@@ -477,7 +472,6 @@ class WebSocketPhase1Adapter:
             iterations=iteration,
             excluded_items=excluded_items,
             status=final_status,
-            final_tex_path=str(final_tex_path),
             final_pdf_path=str(final_pdf_path) if pdf_path.exists() else "",
         )
 
@@ -563,7 +557,6 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
         self,
         paper_id: str,
         pdf_path: Path,
-        tex_path: Path,
         websocket: WebSocket,
     ) -> Dict[str, Any]:
         """校正を実行（WebSocket版）"""
@@ -665,7 +658,6 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                 paper_id=paper_id,
                 phase=phase,
                 iteration=iteration,
-                tex_path=tex_path,
                 pdf_path=pdf_path,
             )
 
@@ -684,7 +676,6 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                 response = self.llm_client.call(
                     prompt=prompt,
                     pdf_path=pdf_path,
-                    tex_path=tex_path,
                 )
             except Exception as e:
                 llm_success = False
@@ -993,7 +984,6 @@ class WebSocketPhase2Adapter:
         self,
         paper_id: str,
         pdf_path: Path,
-        tex_path: Path,
         websocket: WebSocket,
     ) -> Dict[str, Any]:
         """誤り埋め込みを実行（WebSocket版）"""

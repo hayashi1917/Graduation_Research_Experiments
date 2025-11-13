@@ -46,7 +46,6 @@ class Phase2Embedder:
         self,
         paper_id: str,
         pdf_path: Path,
-        tex_path: Path,
     ) -> Dict[str, Any]:
         """
         誤り埋め込みを実行
@@ -54,7 +53,6 @@ class Phase2Embedder:
         Args:
             paper_id: 論文ID
             pdf_path: PDFファイルのパス
-            tex_path: TeXファイルのパス
 
         Returns:
             埋め込まれた誤りのリスト
@@ -79,7 +77,6 @@ class Phase2Embedder:
         response = self.llm_client.call(
             prompt=prompt,
             pdf_path=pdf_path,
-            tex_path=tex_path,
         )
 
         # 応答を保存
@@ -124,7 +121,7 @@ class Phase2Embedder:
 
         # ユーザーに確認
         print("\n次のステップ:")
-        print("1. 上記の誤りを実際の論文（TeXファイル）に反映してください")
+        print("1. 上記の誤りを実際の論文（PDFファイル）に反映してください")
         print("2. 修正が完了したら、フェーズ3（校正実験）に進んでください")
 
         print(f"\n{'='*60}")

@@ -114,12 +114,10 @@ async def get_papers():
         for paper_dir in papers_dir.iterdir():
             if paper_dir.is_dir():
                 pdf_files = list(paper_dir.glob("*.pdf"))
-                tex_files = list(paper_dir.glob("*.tex"))
-                if pdf_files and tex_files:
+                if pdf_files:
                     papers.append({
                         "id": paper_dir.name,
                         "pdf": pdf_files[0].name,
-                        "tex": tex_files[0].name,
                     })
     return {"papers": papers}
 
@@ -128,7 +126,6 @@ async def get_papers():
 async def upload_paper(
     paper_id: str = Form(...),
     pdf_file: UploadFile = File(...),
-    tex_file: UploadFile = File(...),
 ):
     """論文をアップロード"""
     try:
@@ -142,17 +139,10 @@ async def upload_paper(
             content = await pdf_file.read()
             f.write(content)
 
-        # TeXファイルを保存
-        tex_path = paper_dir / tex_file.filename
-        with open(tex_path, "wb") as f:
-            content = await tex_file.read()
-            f.write(content)
-
         return {
             "status": "success",
             "message": f"論文 {paper_id} をアップロードしました",
             "pdf": pdf_file.filename,
-            "tex": tex_file.filename,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -349,9 +339,8 @@ async def execute_phase(paper_id: str, phase: str, websocket: WebSocket, client_
         # 論文ファイルのパスを取得
         paper_dir = papers_dir / paper_id
         pdf_files = list(paper_dir.glob("*.pdf"))
-        tex_files = list(paper_dir.glob("*.tex"))
 
-        if not pdf_files or not tex_files:
+        if not pdf_files:
             await manager.send_message({
                 "type": "error",
                 "message": "論文ファイルが見つかりません",
@@ -359,7 +348,6 @@ async def execute_phase(paper_id: str, phase: str, websocket: WebSocket, client_
             return
 
         pdf_path = pdf_files[0]
-        tex_path = tex_files[0]
 
         # LLMクライアントの初期化
         if phase in ["phase1", "phase3"]:
@@ -387,11 +375,11 @@ async def execute_phase(paper_id: str, phase: str, websocket: WebSocket, client_
 
         # フェーズ実行
         if phase == "phase1":
-            await execute_phase1(paper_id, pdf_path, tex_path, llm_client, websocket, client_id)
+            await execute_phase1(paper_id, pdf_path, llm_client, websocket, client_id)
         elif phase == "phase2":
-            await execute_phase2(paper_id, pdf_path, tex_path, llm_client, websocket, client_id)
+            await execute_phase2(paper_id, pdf_path, llm_client, websocket, client_id)
         elif phase == "phase3":
-            await execute_phase3(paper_id, pdf_path, tex_path, llm_client, websocket, client_id)
+            await execute_phase3(paper_id, pdf_path, llm_client, websocket, client_id)
 
     except Exception as e:
         import traceback
@@ -405,7 +393,6 @@ async def execute_phase(paper_id: str, phase: str, websocket: WebSocket, client_
 async def execute_phase1(
     paper_id: str,
     pdf_path: Path,
-    tex_path: Path,
     llm_client: LLMClient,
     websocket: WebSocket,
     client_id: str
@@ -435,7 +422,6 @@ async def execute_phase1(
         result = await adapter.run(
             paper_id=paper_id,
             pdf_path=pdf_path,
-            tex_path=tex_path,
             websocket=websocket,
         )
 
@@ -461,7 +447,6 @@ async def execute_phase1(
 async def execute_phase2(
     paper_id: str,
     pdf_path: Path,
-    tex_path: Path,
     llm_client: LLMClient,
     websocket: WebSocket,
     client_id: str
@@ -490,7 +475,6 @@ async def execute_phase2(
         result = await adapter.run(
             paper_id=paper_id,
             pdf_path=pdf_path,
-            tex_path=tex_path,
             websocket=websocket,
         )
 
@@ -516,7 +500,6 @@ async def execute_phase2(
 async def execute_phase3(
     paper_id: str,
     pdf_path: Path,
-    tex_path: Path,
     llm_client: LLMClient,
     websocket: WebSocket,
     client_id: str
@@ -545,7 +528,6 @@ async def execute_phase3(
         result = await adapter.run(
             paper_id=paper_id,
             pdf_path=pdf_path,
-            tex_path=tex_path,
             websocket=websocket,
         )
 
