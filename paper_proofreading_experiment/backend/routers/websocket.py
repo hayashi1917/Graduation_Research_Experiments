@@ -164,7 +164,7 @@ async def execute_phase(
                 raise ValueError("環境変数 GOOGLE_API_KEY または GEMINI_API_KEY が設定されていません")
             llm_client = GeminiClient(model=model, api_key=api_key, temperature=temperature)
             logger.info("GeminiClientを初期化しました")
-        elif provider == "anthropic":
+        elif provider in ["anthropic", "claude"]:
             api_key = os.getenv("ANTHROPIC_API_KEY")
             if not api_key:
                 raise ValueError("環境変数 ANTHROPIC_API_KEY が設定されていません")
