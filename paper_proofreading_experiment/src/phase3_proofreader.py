@@ -178,14 +178,21 @@ class Phase3Proofreader:
                     item = input("除外するチェックリスト項目名: ").strip()
                     reason = input("除外理由（短く）: ").strip()
 
-                    if item:
-                        excluded_items.append(item)
-                        self.data_manager.record_excluded_item(
-                            paper_id=paper_id,
-                            checklist_item=item,
-                            reason=reason,
-                            example_case=f"phase3_iteration_{iteration}_issue{issue.issue_number}",
-                        )
+                    if not item:
+                        print("→ 項目名が入力されていません。もう一度入力してください。")
+                        continue
+
+                    if item in excluded_items:
+                        print("→ その項目は既に除外済みです。別の項目を指定してください。")
+                        continue
+
+                    excluded_items.append(item)
+                    self.data_manager.record_excluded_item(
+                        paper_id=paper_id,
+                        checklist_item=item,
+                        reason=reason,
+                        example_case=f"phase3_iteration_{iteration}_issue{issue.issue_number}",
+                    )
 
                 elif action == "Q":
                     print("\n校正を中断します。")

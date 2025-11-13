@@ -13,6 +13,9 @@ from typing import List, Dict, Any, Optional, Tuple
 class DataManager:
     """実験データの記録を管理するクラス"""
 
+    # フェーズ3で埋め込み誤りを検出したとみなすアクション
+    FIX_ACTIONS = {"accept", "manual_fix", "A", "M"}
+
     def __init__(self, results_dir: Path):
         """
         Args:
@@ -27,6 +30,9 @@ class DataManager:
         self.excluded_items_csv = self.results_dir / "excluded_items.csv"
         self.summary_csv = self.results_dir / "summary.csv"
         self.detected_issues_csv = self.results_dir / "detected_issues.csv"
+        self.detected_embedded_errors_csv = (
+            self.results_dir / "detected_embedded_errors.csv"
+        )
         self.parse_failures_csv = self.results_dir / "parse_failures.csv"
         self.llm_calls_csv = self.results_dir / "llm_calls.csv"
         self.user_actions_csv = self.results_dir / "user_actions.csv"
@@ -150,6 +156,27 @@ class DataManager:
                     "reasoning",
                     "after",
                     "user_action",
+                    "timestamp",
+                ])
+
+        # detected_embedded_errors.csv
+        if not self.detected_embedded_errors_csv.exists():
+            with open(
+                self.detected_embedded_errors_csv,
+                "w",
+                newline="",
+                encoding="utf-8",
+            ) as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "session_id",
+                    "paper_id",
+                    "phase",
+                    "iteration",
+                    "issue_number",
+                    "embedded_error_id",
+                    "checklist_item",
+                    "action",
                     "timestamp",
                 ])
 
@@ -284,6 +311,13 @@ class DataManager:
         """除外されたチェックリスト項目を記録"""
         timestamp = datetime.now().isoformat()
 
+        if not checklist_item:
+            return False
+
+        # 既に同じ項目が登録されていれば新規に追加しない
+        if paper_id and self._excluded_item_exists(paper_id, checklist_item, session_id):
+            return False
+
         with open(self.excluded_items_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -294,6 +328,8 @@ class DataManager:
                 timestamp,
                 example_case,
             ])
+
+        return True
 
     def record_detected_issue(
         self,
@@ -324,6 +360,36 @@ class DataManager:
                 reasoning,
                 after,
                 user_action,
+                timestamp,
+            ])
+
+    def record_detected_embedded_error(
+        self,
+        session_id: str,
+        paper_id: str,
+        phase: str,
+        iteration: int,
+        issue_number: int,
+        embedded_error_id: str,
+        checklist_item: str,
+        action: str,
+    ):
+        """埋め込み誤りごとの検出ログを記録"""
+        timestamp = datetime.now().isoformat()
+
+        with open(
+            self.detected_embedded_errors_csv, "a", newline="", encoding="utf-8"
+        ) as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                session_id,
+                paper_id,
+                phase,
+                iteration,
+                issue_number,
+                embedded_error_id,
+                checklist_item,
+                action,
                 timestamp,
             ])
 
@@ -490,48 +556,16 @@ class DataManager:
                 }
             }
         """
-        # 埋め込まれた誤りを取得（このセッションのみ）
-        embedded_errors = {}
-        if self.embedded_errors_csv.exists():
-            with open(self.embedded_errors_csv, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    if row["session_id"] == session_id and row["paper_id"] == paper_id:
-                        error_id = row["error_id"]
-                        embedded_errors[error_id] = {
-                            "checklist_item": row["checklist_item"],
-                            "before": row["before"],
-                            "after": row["after"],
-                            "detected_iteration": 0,  # 0 = 未検出
-                            "detected": False,
-                        }
+        embedded_errors = self.load_embedded_error_state(session_id, paper_id)
 
-        # 検出された指摘事項を取得（このセッション、フェーズ、current_iterationまで）
-        if self.detected_issues_csv.exists():
-            with open(self.detected_issues_csv, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    if (
-                        row["session_id"] == session_id
-                        and row["paper_id"] == paper_id
-                        and row["phase"] == phase
-                        and int(row["iteration"]) <= current_iteration
-                        and row["user_action"] == "accept"  # acceptされた指摘のみ
-                    ):
-                        detected_before = row["before"]
-                        detected_after = row["after"]
-                        iteration_num = int(row["iteration"])
-
-                        # 埋め込まれた誤りとマッチング（before/afterの類似性で判定）
-                        for error_id, error_info in embedded_errors.items():
-                            if not error_info["detected"]:
-                                # 単純な文字列マッチング（実際にはより高度なマッチングが必要かも）
-                                if (
-                                    error_info["before"].strip() in detected_before.strip()
-                                    or detected_before.strip() in error_info["before"].strip()
-                                ):
-                                    embedded_errors[error_id]["detected"] = True
-                                    embedded_errors[error_id]["detected_iteration"] = iteration_num
+        # 過去の検出履歴を適用
+        self.mark_detected_errors_from_history(
+            session_id=session_id,
+            paper_id=paper_id,
+            phase=phase,
+            max_iteration=current_iteration,
+            embedded_errors=embedded_errors,
+        )
 
         # 検出率を計算
         total_embedded = len(embedded_errors)
@@ -580,6 +614,139 @@ class DataManager:
                     errors.append(row)
 
         return errors
+
+    def get_session_embedded_errors(
+        self, session_id: str, paper_id: str
+    ) -> List[Dict[str, Any]]:
+        """指定されたセッションの埋め込まれた誤りを取得"""
+        errors = []
+        if not self.embedded_errors_csv.exists():
+            return errors
+
+        with open(self.embedded_errors_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row["session_id"] == session_id and row["paper_id"] == paper_id:
+                    errors.append(row)
+
+        return errors
+
+    def load_embedded_error_state(
+        self, session_id: str, paper_id: str
+    ) -> Dict[str, Dict[str, Any]]:
+        """検出状況を含む埋め込み誤り情報を辞書で取得"""
+        state: Dict[str, Dict[str, Any]] = {}
+        for row in self.get_session_embedded_errors(session_id, paper_id):
+            error_id = row["error_id"]
+            state[error_id] = {
+                "checklist_item": row.get("checklist_item", ""),
+                "before": row.get("before", ""),
+                "after": row.get("after", ""),
+                "detected": False,
+                "detected_iteration": 0,
+            }
+
+        return state
+
+    def mark_detected_errors_from_history(
+        self,
+        session_id: str,
+        paper_id: str,
+        phase: str,
+        max_iteration: int,
+        embedded_errors: Dict[str, Dict[str, Any]],
+    ) -> None:
+        """過去の指摘履歴をもとに検出済みフラグを更新"""
+
+        if not embedded_errors:
+            return
+
+        if self.detected_embedded_errors_csv.exists():
+            with open(
+                self.detected_embedded_errors_csv, "r", encoding="utf-8"
+            ) as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if (
+                        row["session_id"] != session_id
+                        or row["paper_id"] != paper_id
+                        or row["phase"] != phase
+                    ):
+                        continue
+
+                    iteration_num = int(row["iteration"])
+                    if iteration_num > max_iteration:
+                        continue
+
+                    error_id = row.get("embedded_error_id", "")
+                    if not error_id or error_id not in embedded_errors:
+                        continue
+
+                    embedded_errors[error_id]["detected"] = True
+                    embedded_errors[error_id]["detected_iteration"] = iteration_num
+
+        if not self.detected_issues_csv.exists():
+            return
+
+        with open(self.detected_issues_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if (
+                    row["session_id"] != session_id
+                    or row["paper_id"] != paper_id
+                    or row["phase"] != phase
+                ):
+                    continue
+
+                iteration_num = int(row["iteration"])
+                if iteration_num > max_iteration:
+                    continue
+
+                action = row["user_action"]
+                if action not in self.FIX_ACTIONS:
+                    continue
+
+                matched_error_id = self.find_matching_embedded_error(
+                    embedded_errors,
+                    row.get("before", ""),
+                    row.get("after", ""),
+                )
+
+                if matched_error_id:
+                    embedded_errors[matched_error_id]["detected"] = True
+                    embedded_errors[matched_error_id]["detected_iteration"] = iteration_num
+
+    @staticmethod
+    def _texts_match(source: str, target: str) -> bool:
+        """簡易的なテキストマッチング"""
+        source = (source or "").strip()
+        target = (target or "").strip()
+        if not source or not target:
+            return False
+        return source in target or target in source
+
+    def find_matching_embedded_error(
+        self,
+        embedded_errors: Dict[str, Dict[str, Any]],
+        detected_before: str,
+        detected_after: str,
+    ) -> Optional[str]:
+        """指摘内容に該当する埋め込み誤りIDを検索"""
+
+        for error_id, error_info in embedded_errors.items():
+            if error_info.get("detected"):
+                continue
+
+            before_text = error_info.get("before", "")
+            after_text = error_info.get("after", "")
+
+            if self._texts_match(before_text, detected_before):
+                return error_id
+
+            if self._texts_match(after_text, detected_after):
+                return error_id
+
+        return None
 
     def save_response(
         self, paper_id: str, phase: str, iteration: int, response: str
@@ -723,6 +890,42 @@ class DataManager:
         with open(self.sessions_file, "w", encoding="utf-8") as f:
             json.dump(sessions_data, f, ensure_ascii=False, indent=2)
 
+    def update_session_metadata(
+        self,
+        session_id: str,
+        paper_id: str,
+        phase1_start: str = "",
+        phase1_end: str = "",
+        phase2_end: str = "",
+        phase3_end: str = "",
+    ):
+        """既存のセッションメタデータを更新"""
+
+        sessions_data = self._safe_load_json(self.sessions_file, default={})
+
+        if session_id not in sessions_data:
+            sessions_data[session_id] = {}
+
+        if paper_id not in sessions_data[session_id]:
+            sessions_data[session_id][paper_id] = {
+                "phase1_start": "",
+                "phase1_end": "",
+                "phase2_end": "",
+                "phase3_end": "",
+            }
+
+        if phase1_start:
+            sessions_data[session_id][paper_id]["phase1_start"] = phase1_start
+        if phase1_end:
+            sessions_data[session_id][paper_id]["phase1_end"] = phase1_end
+        if phase2_end:
+            sessions_data[session_id][paper_id]["phase2_end"] = phase2_end
+        if phase3_end:
+            sessions_data[session_id][paper_id]["phase3_end"] = phase3_end
+
+        with open(self.sessions_file, "w", encoding="utf-8") as f:
+            json.dump(sessions_data, f, ensure_ascii=False, indent=2)
+
     def get_excluded_items(self, paper_id: str, session_id: str = "") -> List[str]:
         """指定された論文（およびセッション）の除外項目リストを取得
 
@@ -731,6 +934,7 @@ class DataManager:
             session_id: セッションID（指定しない場合は最新の除外項目を取得）
         """
         excluded = []
+        seen_items = set()
         if not self.excluded_items_csv.exists():
             return excluded
 
@@ -739,10 +943,45 @@ class DataManager:
             for row in reader:
                 if row["paper_id"] == paper_id:
                     # session_idが指定されていない、または一致する場合に追加
-                    if not session_id or row.get("session_id", "") == session_id:
-                        excluded.append(row["checklist_item"])
+                    row_session_id = row.get("session_id", "")
+                    if session_id and row_session_id != session_id:
+                        continue
+
+                    item = row["checklist_item"].strip()
+                    if not item or item in seen_items:
+                        continue
+
+                    excluded.append(item)
+                    seen_items.add(item)
 
         return excluded
+
+    def _excluded_item_exists(
+        self, paper_id: str, checklist_item: str, session_id: str = ""
+    ) -> bool:
+        """除外項目が既に記録済みかを判定"""
+
+        if not checklist_item or not paper_id:
+            return False
+
+        if not self.excluded_items_csv.exists():
+            return False
+
+        with open(self.excluded_items_csv, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row["paper_id"] != paper_id:
+                    continue
+
+                if row["checklist_item"] != checklist_item:
+                    continue
+
+                if session_id and row.get("session_id", "") != session_id:
+                    continue
+
+                return True
+
+        return False
 
     def get_latest_session_id(self, paper_id: str) -> str:
         """指定された論文の最新セッションIDを取得"""

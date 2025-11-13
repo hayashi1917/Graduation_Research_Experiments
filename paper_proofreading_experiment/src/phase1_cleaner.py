@@ -189,6 +189,14 @@ class Phase1Cleaner:
                     item = input("除外するチェックリスト項目名: ").strip()
                     reason = input("除外理由（短く）: ").strip()
 
+                    if not item:
+                        print("→ 項目名が入力されていません。もう一度入力してください。")
+                        continue
+
+                    if item in excluded_items:
+                        print("→ その項目は既に除外済みです。別の項目を指定してください。")
+                        continue
+
                     new_excluded.append(item)
                     excluded_items.append(item)
 
