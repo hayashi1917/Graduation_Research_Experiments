@@ -302,7 +302,8 @@ class WebSocketPhase1Adapter:
                         len(issues)
                     )
 
-                    if action not in {"M", "S", "Q"}:
+                    if action not in {"A", "M", "S", "Q"}:
+
                         await websocket.send_json({
                             "type": "log",
                             "message": "無効なアクションです。もう一度選択してください。",
@@ -332,6 +333,16 @@ class WebSocketPhase1Adapter:
                         action_value=action,
                         context=f"issue_{issue.issue_number}/{len(issues)}",
                     )
+
+                    if action == "A":
+                        await websocket.send_json({
+                            "type": "log",
+                            "message": f"指摘 {issue.issue_number}: 承認として記録",
+                            "level": "info"
+                        })
+                        detected_in_iteration.append(f"issue_{issue.issue_number}_accepted")
+                        break
+
 
                     if action == "M":
                         await websocket.send_json({
