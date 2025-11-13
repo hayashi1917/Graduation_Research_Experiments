@@ -84,14 +84,32 @@ print("\n" + "="*70)
 print("ResponseParser.parse_proofreading_response() の結果:")
 print("="*70)
 
-issues = parser.parse_proofreading_response(test_response)
+parse_result = parser.parse_proofreading_response(test_response)
+issues = parse_result.issues
 
 print(f"\n抽出された指摘数: {len(issues)}")
+print(f"指摘なしフラグ: {parse_result.no_issues}")
 
 if issues:
     parser.display_issues(issues)
+elif parse_result.no_issues:
+    print("LLM応答は指摘なしと判断されました。")
 else:
     print("指摘が抽出されませんでした。")
+
+print("\n" + "="*70)
+print("追加テスト: JSONが少し壊れていてもno_issuesを検出できるか")
+print("="*70)
+
+no_issue_response = """Gemini 2.5 Pro response:
+```json
+{'no_issues': true, 'issues': []}
+```
+"""
+
+no_issue_result = parser.parse_proofreading_response(no_issue_response)
+print(f"指摘なし判定: {no_issue_result.no_issues}")
+print(f"抽出された指摘数: {len(no_issue_result.issues)}")
 
 # より詳細なデバッグ: 応答を行ごとに表示
 print("\n" + "="*70)
