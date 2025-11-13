@@ -624,23 +624,27 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
             iteration = saved_iteration
             excluded_items = saved_excluded_items
         else:
-            # 新規開始 - 最新のセッションIDを取得（Phase1で作成されたもの）
-            session_id = self.data_manager.get_latest_session_id(paper_id)
-            if not session_id:
-                # セッションが存在しない場合はエラー
+            # 新規開始 - Phase1セッションを取得（新しいphase1_sessions.jsonから）
+            phase1_sessions = self.data_manager.get_phase1_sessions(paper_id)
+            if not phase1_sessions:
+                # Phase1セッションが存在しない場合はエラー
                 await websocket.send_json({
                     "type": "error",
                     "message": "エラー: Phase1のセッションが見つかりません。先にPhase1を実行してください。",
                 })
                 raise ValueError("Phase1のセッションが見つかりません")
 
+            # 最新のPhase1セッションを使用
+            latest_phase1 = phase1_sessions[0]  # すでに新しい順でソートされている
+            session_id = latest_phase1["phase1_id"]
+
             iteration = 0
-            # セッションIDに紐づく除外項目を取得
-            excluded_items = self.data_manager.get_excluded_items(paper_id, session_id)
+            # Phase1セッションIDに紐づく除外項目を取得
+            excluded_items = latest_phase1.get("excluded_items", [])
 
             await websocket.send_json({
                 "type": "log",
-                "message": f"セッション {session_id} の除外項目を使用します（{len(excluded_items)}件）",
+                "message": f"Phase1セッション {session_id} の除外項目を使用します（{len(excluded_items)}件）",
                 "level": "info"
             })
 
@@ -1046,31 +1050,28 @@ class WebSocketPhase2Adapter:
             "level": "info"
         })
 
-        # TODO: Phase1セッション選択機能
-        # 将来的には、ユーザーがどのPhase1セッションを使用するか選択できるようにする
-        # phase1_sessions = self.data_manager.get_phase1_sessions(paper_id)
-        # selected_phase1 = phase1_sessions[0] if phase1_sessions else None
-
-        # 最新のセッションIDを取得（Phase1で作成されたもの）
-        # Note: 現在は古いsessions.jsonベースのセッション管理を使用
-        # Phase1セッション（phase1_sessions.json）への移行が必要
-        session_id = self.data_manager.get_latest_session_id(paper_id)
-        if not session_id:
-            # セッションが存在しない場合はエラー
+        # Phase1セッションを取得（新しいphase1_sessions.jsonから）
+        phase1_sessions = self.data_manager.get_phase1_sessions(paper_id)
+        if not phase1_sessions:
+            # Phase1セッションが存在しない場合はエラー
             await websocket.send_json({
                 "type": "error",
                 "message": "エラー: Phase1のセッションが見つかりません。先にPhase1を実行してください。",
             })
             raise ValueError("Phase1のセッションが見つかりません")
 
+        # 最新のPhase1セッションを使用
+        latest_phase1 = phase1_sessions[0]  # すでに新しい順でソートされている
+        phase1_id = latest_phase1["phase1_id"]
+
         await websocket.send_json({
             "type": "log",
-            "message": f"セッション {session_id} を使用します",
+            "message": f"Phase1セッション {phase1_id} を使用します",
             "level": "info"
         })
 
-        # セッションIDに紐づく除外項目を取得
-        excluded_items = self.data_manager.get_excluded_items(paper_id, session_id)
+        # Phase1セッションIDに紐づく除外項目を取得
+        excluded_items = latest_phase1.get("excluded_items", [])
 
         await websocket.send_json({
             "type": "log",
@@ -1130,7 +1131,7 @@ class WebSocketPhase2Adapter:
 
             # LLM呼び出しを記録
             self.data_manager.record_llm_call(
-                session_id=session_id,
+                session_id=phase1_id,
                 paper_id=paper_id,
                 phase="phase2",
                 iteration=1,
@@ -1170,7 +1171,18 @@ class WebSocketPhase2Adapter:
                 "type": "error",
                 "message": "誤りの抽出に失敗しました。応答を確認して、手動で誤りを記録してください。",
             })
-            return {"errors": [], "success": False, "count": 0}
+
+            # パース失敗を記録
+            self.data_manager.record_parse_failure(
+                session_id=phase1_id,
+                paper_id=paper_id,
+                phase="phase2",
+                iteration=1,
+                raw_response=response,
+                error_message="誤りの抽出に失敗しました",
+            )
+
+            return {"errors": [], "success": False, "count": 0, "session_id": phase1_id}
 
         # 誤りをデータベースに記録
         await websocket.send_json({
@@ -1198,7 +1210,7 @@ class WebSocketPhase2Adapter:
 
             # CSVに記録
             self.data_manager.record_embedded_error(
-                session_id=session_id,
+                session_id=phase1_id,
                 paper_id=paper_id,
                 error_id=error.get("error_id", i),
                 checklist_item=error.get("checklist_item", ""),
@@ -1214,18 +1226,20 @@ class WebSocketPhase2Adapter:
             "level": "success"
         })
 
-        # セッションメタデータを更新（Phase2完了）
+        # Phase1セッションメタデータを更新（Phase2完了）
         from datetime import datetime
-        # 既存のメタデータを取得して更新
-        if self.data_manager.sessions_file.exists():
-            import json
-            with open(self.data_manager.sessions_file, "r", encoding="utf-8") as f:
+        import json
+
+        # phase1_sessions.jsonを更新
+        if self.data_manager.phase1_sessions_file.exists():
+            with open(self.data_manager.phase1_sessions_file, "r", encoding="utf-8") as f:
                 sessions_data = json.load(f)
 
-            if session_id in sessions_data and paper_id in sessions_data[session_id]:
-                sessions_data[session_id][paper_id]["phase2_end"] = datetime.now().isoformat()
+            if phase1_id in sessions_data:
+                sessions_data[phase1_id]["phase2_completed_at"] = datetime.now().isoformat()
+                sessions_data[phase1_id]["embedded_errors_count"] = len(errors)
 
-                with open(self.data_manager.sessions_file, "w", encoding="utf-8") as f:
+                with open(self.data_manager.phase1_sessions_file, "w", encoding="utf-8") as f:
                     json.dump(sessions_data, f, ensure_ascii=False, indent=2)
 
         await websocket.send_json({
@@ -1238,5 +1252,5 @@ class WebSocketPhase2Adapter:
             "errors": errors,
             "success": True,
             "count": len(errors),
-            "session_id": session_id,
+            "session_id": phase1_id,
         }
