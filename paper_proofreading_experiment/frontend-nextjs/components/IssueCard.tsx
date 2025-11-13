@@ -15,6 +15,15 @@ export default function IssueCard({ wsManager }: IssueCardProps) {
   const { currentIssue, currentPhase, isRunning } = useAppStore();
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  // デバッグ用ログ
+  console.log('[IssueCard] 状態:', {
+    hasIssue: !!currentIssue,
+    isRunning,
+    hasWsManager: !!wsManager,
+    shouldShowButtons: isRunning && !!wsManager,
+    currentPhase,
+  });
+
   if (!currentIssue) {
     return (
       <div className="bg-white rounded-lg shadow-md p-6">
