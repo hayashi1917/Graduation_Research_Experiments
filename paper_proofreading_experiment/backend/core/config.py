@@ -3,6 +3,21 @@ Application configuration
 """
 from pathlib import Path
 import yaml
+from dotenv import load_dotenv
+import os
+
+# .envファイルを読み込む（プロジェクトルートから検索）
+env_path = Path(__file__).parent.parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+else:
+    # backend/.envも試す
+    backend_env_path = Path(__file__).parent.parent / ".env"
+    if backend_env_path.exists():
+        load_dotenv(dotenv_path=backend_env_path)
+    else:
+        # 環境変数から読み込む（Dockerコンテナなどの場合）
+        load_dotenv()
 
 
 class Settings:

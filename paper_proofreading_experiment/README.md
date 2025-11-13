@@ -273,6 +273,31 @@ uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
 ## トラブルシューティング
 
+### 環境変数エラー
+
+**エラー**: `ValueError: 環境変数 GOOGLE_API_KEY または GEMINI_API_KEY が設定されていません`
+
+**解決方法**:
+
+1. プロジェクトルートに`.env`ファイルを作成してください：
+   ```bash
+   cp .env.example .env
+   ```
+
+2. `.env`ファイルにAPIキーを設定：
+   ```bash
+   GOOGLE_API_KEY=your_actual_api_key_here
+   # または
+   GEMINI_API_KEY=your_actual_api_key_here
+   ```
+
+3. `python-dotenv`がインストールされているか確認：
+   ```bash
+   pip install -r backend/requirements.txt
+   ```
+
+4. サーバーを再起動してください
+
 ### LLM APIエラー
 
 **エラー**: `API key not found`
