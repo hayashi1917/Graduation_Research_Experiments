@@ -64,6 +64,12 @@ export default function Home() {
             console.log('[Page] イテレーション開始:', message);
             addLog(`イテレーション ${message.iteration} を開始`, 'info');
             setCurrentIteration(message.iteration || 0);
+            setCurrentIssue(null);  // 前のイテレーションの指摘事項をクリア
+            break;
+
+          case 'llm_response':
+            console.log('[Page] LLM応答受信:', message);
+            addLog(message.message || 'LLMの応答を受信しました', 'info');
             break;
 
           case 'user_action_required':
@@ -95,6 +101,17 @@ export default function Home() {
             }
             break;
 
+          case 'embedded_error':
+            console.log('[Page] 埋め込みエラー:', message);
+            if (message.error) {
+              const error = message.error;
+              addLog(
+                `埋め込みエラー ${message.index}/${message.total}: ${error.checklist_item} - ${error.description || error.category}`,
+                'info'
+              );
+            }
+            break;
+
           case 'action_received':
             console.log('[Page] アクション受信確認:', message);
             addLog(`アクション受信: ${message.action}`, 'info');
@@ -105,6 +122,8 @@ export default function Home() {
             addLog(`エラー: ${message.message}`, 'error');
             toast.error(message.message || 'エラーが発生しました');
             setIsRunning(false);
+            setCurrentPhase(null);
+            setCurrentIssue(null);  // エラー時も指摘事項をクリア
             break;
 
           case 'log':

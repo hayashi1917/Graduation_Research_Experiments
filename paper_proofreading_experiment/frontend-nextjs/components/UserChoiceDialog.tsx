@@ -20,6 +20,12 @@ export default function UserChoiceDialog({
     onClose();
   };
 
+  const handleClose = () => {
+    // ダイアログを閉じる場合、デフォルトで'N'を送信（中断として扱う）
+    onChoice('N');
+    onClose();
+  };
+
   const getChoiceLabel = (choice: string): string => {
     switch (choice) {
       case 'Y':
@@ -43,12 +49,18 @@ export default function UserChoiceDialog({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      onClick={handleClose}
+    >
+      <div
+        className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h3 className="text-xl font-bold text-gray-900">確認</h3>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
             <X className="w-6 h-6" />
