@@ -36,6 +36,15 @@ function setupEventListeners() {
         modal.show();
     });
 
+    // リセットボタン
+    document.getElementById('reset-btn').addEventListener('click', () => {
+        const modal = new bootstrap.Modal(document.getElementById('resetModal'));
+        modal.show();
+    });
+
+    // リセット確認ボタン
+    document.getElementById('reset-confirm-btn').addEventListener('click', handleReset);
+
     // 設定保存
     document.getElementById('settings-save-btn').addEventListener('click', saveSettings);
 
@@ -53,6 +62,10 @@ function setupEventListeners() {
     document.getElementById('action-skip').addEventListener('click', () => sendAction('S'));
     document.getElementById('action-difficult').addEventListener('click', () => sendAction('D'));
     document.getElementById('action-quit').addEventListener('click', () => sendAction('Q'));
+
+    // コピーボタン
+    document.getElementById('copy-before-btn').addEventListener('click', () => copyToClipboard('issue-before', 'copy-before-btn'));
+    document.getElementById('copy-after-btn').addEventListener('click', () => copyToClipboard('issue-after', 'copy-after-btn'));
 
     // キーボードショートカット
     document.addEventListener('keydown', (e) => {
@@ -650,4 +663,92 @@ function getPhaseLabel(phase) {
         phase3: 'フェーズ3: 校正',
     };
     return labels[phase] || phase;
+}
+
+/**
+ * データリセットを実行
+ */
+async function handleReset() {
+    const resetResults = document.getElementById('reset-results').checked;
+    const resetVersions = document.getElementById('reset-versions').checked;
+    const resetProgress = document.getElementById('reset-progress').checked;
+
+    if (!resetResults && !resetVersions && !resetProgress) {
+        addLogMessage('削除する項目を選択してください', 'warning');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/reset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                reset_results: resetResults,
+                reset_versions: resetVersions,
+                reset_progress: resetProgress,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        // モーダルを閉じる
+        const modal = bootstrap.Modal.getInstance(document.getElementById('resetModal'));
+        modal.hide();
+
+        addLogMessage('データを削除しました', 'success');
+
+        // UIを更新
+        if (AppState.selectedPaperId) {
+            loadIterations(AppState.selectedPaperId);
+            loadSessions(AppState.selectedPaperId);
+        }
+    } catch (error) {
+        console.error('リセットエラー:', error);
+        addLogMessage(`リセットに失敗しました: ${error.message}`, 'error');
+    }
+}
+
+/**
+ * テキストをクリップボードにコピー
+ */
+async function copyToClipboard(elementId, buttonId) {
+    const element = document.getElementById(elementId);
+    const button = document.getElementById(buttonId);
+
+    if (!element || !button) {
+        console.error('Element not found:', elementId, buttonId);
+        return;
+    }
+
+    const text = element.textContent;
+
+    try {
+        await navigator.clipboard.writeText(text);
+
+        // ボタンのアイコンとテキストを一時的に変更
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<i class="bi bi-check-circle-fill"></i> コピー完了！';
+        button.classList.add('btn-success');
+        button.classList.remove('btn-outline-primary', 'btn-outline-success');
+
+        // 1.5秒後に元に戻す
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.classList.remove('btn-success');
+            if (elementId === 'issue-before') {
+                button.classList.add('btn-outline-primary');
+            } else {
+                button.classList.add('btn-outline-success');
+            }
+        }, 1500);
+
+        addLogMessage('クリップボードにコピーしました', 'success');
+    } catch (err) {
+        console.error('クリップボードへのコピーに失敗:', err);
+        addLogMessage('クリップボードへのコピーに失敗しました', 'error');
+    }
 }

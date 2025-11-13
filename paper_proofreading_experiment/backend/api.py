@@ -568,5 +568,80 @@ async def execute_phase3(
             del manager.phase_adapters[client_id]
 
 
+# ====================================================================
+# データ管理エンドポイント
+# ====================================================================
+
+@app.post("/api/reset")
+async def reset_data(request: dict):
+    """データをリセット"""
+    reset_results = request.get("reset_results", False)
+    reset_versions = request.get("reset_versions", False)
+    reset_progress = request.get("reset_progress", False)
+
+    deleted_items = []
+
+    try:
+        if reset_results:
+            # 実験結果データを削除
+            import shutil
+            if results_dir.exists():
+                # CSVファイルとJSONファイルを削除（ディレクトリは残す）
+                for file in results_dir.glob("*.csv"):
+                    file.unlink()
+                    deleted_items.append(str(file.name))
+                for file in results_dir.glob("*.json"):
+                    file.unlink()
+                    deleted_items.append(str(file.name))
+
+                # DataManagerを再初期化してCSVヘッダーを作成
+                global data_manager
+                data_manager = DataManager(results_dir=results_dir)
+
+        if reset_versions:
+            # バージョン履歴を削除
+            import shutil
+            if versions_dir.exists():
+                shutil.rmtree(versions_dir)
+                versions_dir.mkdir(parents=True, exist_ok=True)
+                deleted_items.append("versions/")
+
+        if reset_progress:
+            # 進捗情報を削除
+            progress_file = results_dir / "progress.json"
+            if progress_file.exists():
+                progress_file.unlink()
+                deleted_items.append("progress.json")
+
+        return JSONResponse({
+            "success": True,
+            "message": "データを削除しました",
+            "deleted_items": deleted_items,
+        })
+
+    except Exception as e:
+        import traceback
+        return JSONResponse({
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc(),
+        }, status_code=500)
+
+
+@app.get("/api/phase1_sessions/{paper_id}")
+async def get_phase1_sessions(paper_id: str):
+    """Phase1セッション履歴を取得"""
+    try:
+        sessions = data_manager.get_phase1_sessions(paper_id)
+        return JSONResponse({
+            "paper_id": paper_id,
+            "sessions": sessions,
+        })
+    except Exception as e:
+        return JSONResponse({
+            "error": str(e)
+        }, status_code=500)
+
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
