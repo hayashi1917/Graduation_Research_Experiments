@@ -9,8 +9,7 @@ from fastapi.responses import FileResponse
 from pathlib import Path
 
 from .core.config import settings
-from .routers import papers, data
-from .api import websocket_router, manager  # Keep WebSocket from old api.py for now
+from .routers import papers, data, websocket
 
 # FastAPI application
 app = FastAPI(
@@ -31,7 +30,7 @@ app.add_middleware(
 # Include routers
 app.include_router(papers.router)
 app.include_router(data.router)
-app.include_router(websocket_router)  # WebSocket endpoints from old api.py
+app.include_router(websocket.router)  # WebSocket endpoints
 
 # Serve static files (frontend)
 frontend_path = Path(__file__).parent.parent / "frontend"
