@@ -328,29 +328,6 @@ class WebSocketPhase1Adapter:
                         "level": "info"
                     })
 
-                elif action == "D":
-                    # 判断困難
-                    await websocket.send_json({
-                        "type": "log",
-                        "message": f"指摘 {issue.issue_number}: 判断困難として記録",
-                        "level": "warning"
-                    })
-
-                    # チェックリスト項目を入力（簡略化のため固定値）
-                    item = f"item_issue_{issue.issue_number}"
-                    reason = "判断困難"
-
-                    new_excluded.append(item)
-                    excluded_items.append(item)
-
-                    self.data_manager.record_excluded_item(
-                        session_id=phase1_id,
-                        paper_id=paper_id,
-                        checklist_item=item,
-                        reason=reason,
-                        example_case=f"phase1_iteration_{iteration}_issue{issue.issue_number}",
-                    )
-
                 elif action == "Q":
                     # 中断
                     await websocket.send_json({
@@ -841,27 +818,6 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                         "message": f"指摘 {issue.issue_number}: スキップ",
                         "level": "info"
                     })
-
-                elif action == "D":
-                    await websocket.send_json({
-                        "type": "log",
-                        "message": f"指摘 {issue.issue_number}: 判断困難として記録",
-                        "level": "warning"
-                    })
-
-                    item = f"item_issue_{issue.issue_number}"
-                    reason = "判断困難"
-
-                    new_excluded.append(item)
-                    excluded_items.append(item)
-
-                    self.data_manager.record_excluded_item(
-                        session_id=session_id,
-                        paper_id=paper_id,
-                        checklist_item=item,
-                        reason=reason,
-                        example_case=f"{phase}_iteration_{iteration}_issue{issue.issue_number}",
-                    )
 
                 elif action == "Q":
                     await websocket.send_json({

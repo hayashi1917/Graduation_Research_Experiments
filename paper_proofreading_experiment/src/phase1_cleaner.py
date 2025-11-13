@@ -159,7 +159,6 @@ class Phase1Cleaner:
             print("  [A] 適用: 正しい指摘なので反映（自動適用）")
             print("  [M] 手動: 手動で修正")
             print("  [S] スキップ: 誤検出")
-            print("  [D] 判断困難: 内容理解が必要（該当項目を除外）")
             print("  [Q] 中断: クリーン化を中断")
 
             # インタラクティブな判断
@@ -174,7 +173,7 @@ class Phase1Cleaner:
                 print(f"修正後: {issue.after[:100]}...")
                 print(f"{'='*60}")
 
-                action = input("\n[A]自動適用 / [M]手動 / [S]スキップ / [D]判断困難 / [Q]中断: ").strip().upper()
+                action = input("\n[A]自動適用 / [M]手動 / [S]スキップ / [Q]中断: ").strip().upper()
 
                 if action == "A":
                     print("→ 自動適用します...")
@@ -204,24 +203,6 @@ class Phase1Cleaner:
 
                 elif action == "S":
                     print("→ スキップします（誤検出として記録）。")
-
-                elif action == "D":
-                    print("→ 判断困難として記録し、該当項目を除外します。")
-
-                    # チェックリスト項目を入力
-                    item = input("除外するチェックリスト項目名: ").strip()
-                    reason = input("除外理由（短く）: ").strip()
-
-                    new_excluded.append(item)
-                    excluded_items.append(item)
-
-                    # 除外項目を記録
-                    self.data_manager.record_excluded_item(
-                        paper_id=paper_id,
-                        checklist_item=item,
-                        reason=reason,
-                        example_case=f"phase1_iteration_{iteration}_issue{issue.issue_number}",
-                    )
 
                 elif action == "Q":
                     print("\nクリーン化を中断します。")

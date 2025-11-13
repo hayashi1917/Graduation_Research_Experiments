@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { Copy, CheckCircle, AlertCircle, CheckSquare, Edit, SkipForward, HelpCircle, XCircle } from 'lucide-react';
+import { Copy, CheckCircle, AlertCircle, CheckSquare, Edit, SkipForward, XCircle } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils';
 import { WebSocketManager } from '@/lib/websocket';
 import toast from 'react-hot-toast';
@@ -165,15 +165,6 @@ export default function IssueCard({ wsManager }: IssueCardProps) {
               <span>スキップ (S)</span>
             </button>
 
-            {/* Difficult */}
-            <button
-              onClick={() => handleAction('D', '判断困難')}
-              className="flex items-center justify-center space-x-2 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
-            >
-              <HelpCircle className="w-4 h-4" />
-              <span>判断困難 (D)</span>
-            </button>
-
             {/* Quit */}
             <button
               onClick={() => handleAction('Q', '中断')}
@@ -184,7 +175,7 @@ export default function IssueCard({ wsManager }: IssueCardProps) {
             </button>
           </div>
           <p className="text-xs text-gray-600 mt-3">
-            ※ 自動適用: 提案された修正を自動で適用 | 手動修正: 後で手動で修正 | スキップ: 誤検出として無視 | 判断困難: 除外項目に追加 | 中断: フェーズを終了
+            ※ 自動適用: 提案された修正を自動で適用 | 手動修正: 後で手動で修正 | スキップ: 誤検出として無視 | 中断: フェーズを終了
           </p>
         </div>
       )}
