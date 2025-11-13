@@ -473,9 +473,9 @@ async function loadSettings() {
         document.getElementById('proofreading-model').value =
             settings.llm.proofreading.model;
         document.getElementById('embedding-provider').value =
-            settings.llm.error_embedding.provider;
+            settings.llm.embedding.provider;
         document.getElementById('embedding-model').value =
-            settings.llm.error_embedding.model;
+            settings.llm.embedding.model;
     } catch (error) {
         addLogMessage('設定の読み込みエラー: ' + error.message, 'error');
     }
@@ -492,7 +492,7 @@ async function saveSettings() {
                     provider: document.getElementById('proofreading-provider').value,
                     model: document.getElementById('proofreading-model').value,
                 },
-                error_embedding: {
+                embedding: {
                     provider: document.getElementById('embedding-provider').value,
                     model: document.getElementById('embedding-model').value,
                 },
