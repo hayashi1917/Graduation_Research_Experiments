@@ -38,6 +38,9 @@ class DataManager:
         # セッションメタデータファイルのパス
         self.sessions_file = self.results_dir / "sessions.json"
 
+        # Phase1セッション管理ファイルのパス
+        self.phase1_sessions_file = self.results_dir / "phase1_sessions.json"
+
         # CSVファイルを初期化
         self._initialize_csv_files()
 
@@ -753,6 +756,133 @@ class DataManager:
                     latest_session_id = session_id
 
         return latest_session_id
+
+    # ====================================================================
+    # Phase1セッション管理メソッド
+    # ====================================================================
+
+    def generate_phase1_id(self) -> str:
+        """新しいPhase1 IDを生成（タイムスタンプベース）"""
+        return f"phase1_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    def save_phase1_session(
+        self,
+        phase1_id: str,
+        paper_id: str,
+        started_at: str,
+        status: str = "in_progress",
+    ):
+        """Phase1セッション情報を保存
+
+        Args:
+            phase1_id: Phase1セッションID
+            paper_id: 論文ID
+            started_at: 開始時刻（ISO形式）
+            status: ステータス（"in_progress", "completed", "aborted"）
+        """
+        sessions_data = self._safe_load_json(self.phase1_sessions_file, default={})
+
+        sessions_data[phase1_id] = {
+            "paper_id": paper_id,
+            "started_at": started_at,
+            "completed_at": "",
+            "iterations": 0,
+            "excluded_items": [],
+            "status": status,
+            "final_tex_path": "",
+            "final_pdf_path": "",
+        }
+
+        with open(self.phase1_sessions_file, "w", encoding="utf-8") as f:
+            json.dump(sessions_data, f, ensure_ascii=False, indent=2)
+
+    def update_phase1_session(
+        self,
+        phase1_id: str,
+        completed_at: str = "",
+        iterations: int = 0,
+        excluded_items: List[str] = None,
+        status: str = "",
+        final_tex_path: str = "",
+        final_pdf_path: str = "",
+    ):
+        """Phase1セッション情報を更新
+
+        Args:
+            phase1_id: Phase1セッションID
+            completed_at: 完了時刻（ISO形式）
+            iterations: イテレーション数
+            excluded_items: 除外項目リスト
+            status: ステータス
+            final_tex_path: 最終TeXファイルのパス
+            final_pdf_path: 最終PDFファイルのパス
+        """
+        sessions_data = self._safe_load_json(self.phase1_sessions_file, default={})
+
+        if phase1_id not in sessions_data:
+            print(f"Warning: Phase1 session {phase1_id} not found")
+            return
+
+        # 指定された項目のみ更新
+        if completed_at:
+            sessions_data[phase1_id]["completed_at"] = completed_at
+        if iterations > 0:
+            sessions_data[phase1_id]["iterations"] = iterations
+        if excluded_items is not None:
+            sessions_data[phase1_id]["excluded_items"] = excluded_items
+        if status:
+            sessions_data[phase1_id]["status"] = status
+        if final_tex_path:
+            sessions_data[phase1_id]["final_tex_path"] = final_tex_path
+        if final_pdf_path:
+            sessions_data[phase1_id]["final_pdf_path"] = final_pdf_path
+
+        with open(self.phase1_sessions_file, "w", encoding="utf-8") as f:
+            json.dump(sessions_data, f, ensure_ascii=False, indent=2)
+
+    def get_phase1_sessions(self, paper_id: str) -> List[Dict[str, Any]]:
+        """指定された論文のPhase1セッションリストを取得
+
+        Args:
+            paper_id: 論文ID
+
+        Returns:
+            Phase1セッションのリスト（新しい順）
+        """
+        sessions_data = self._safe_load_json(self.phase1_sessions_file, default={})
+
+        # 指定された論文のセッションのみ抽出
+        paper_sessions = []
+        for phase1_id, session_info in sessions_data.items():
+            if session_info["paper_id"] == paper_id:
+                paper_sessions.append({
+                    "phase1_id": phase1_id,
+                    **session_info
+                })
+
+        # 開始時刻で降順ソート（新しい順）
+        paper_sessions.sort(key=lambda x: x["started_at"], reverse=True)
+
+        return paper_sessions
+
+    def get_phase1_session(self, phase1_id: str) -> Optional[Dict[str, Any]]:
+        """特定のPhase1セッション情報を取得
+
+        Args:
+            phase1_id: Phase1セッションID
+
+        Returns:
+            セッション情報、存在しない場合はNone
+        """
+        sessions_data = self._safe_load_json(self.phase1_sessions_file, default={})
+
+        if phase1_id in sessions_data:
+            return {
+                "phase1_id": phase1_id,
+                **sessions_data[phase1_id]
+            }
+
+        return None
 
 
 if __name__ == "__main__":

@@ -425,6 +425,7 @@ async def execute_phase1(
             paper_manager=paper_manager,
             prompt_template=prompts["prompt_a_and_c"]["template"],
             checklist=checklist,
+            versions_dir=versions_dir,
         )
 
         # アダプターを登録

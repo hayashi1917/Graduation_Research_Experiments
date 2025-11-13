@@ -30,12 +30,14 @@ class WebSocketPhase1Adapter:
         paper_manager: PaperManager,
         prompt_template: str,
         checklist: str,
+        versions_dir: Path = None,
     ):
         self.llm_client = llm_client
         self.data_manager = data_manager
         self.paper_manager = paper_manager
         self.prompt_template = prompt_template
         self.checklist = checklist
+        self.versions_dir = versions_dir
         self.parser = ResponseParser()
 
         # ユーザーアクション待ち用
@@ -58,35 +60,36 @@ class WebSocketPhase1Adapter:
         })
 
         # 進捗を読み込む（前回の続きから開始）
-        saved_session_id, saved_iteration, saved_excluded_items = self.data_manager.load_progress(paper_id, "phase1")
+        saved_phase1_id, saved_iteration, saved_excluded_items = self.data_manager.load_progress(paper_id, "phase1")
 
         if saved_iteration > 0:
             # 進捗から再開
             await websocket.send_json({
                 "type": "log",
-                "message": f"前回の進捗を検出: セッション {saved_session_id}、イテレーション {saved_iteration} から再開します",
+                "message": f"前回の進捗を検出: Phase1 {saved_phase1_id}、イテレーション {saved_iteration} から再開します",
                 "level": "info"
             })
-            session_id = saved_session_id
+            phase1_id = saved_phase1_id
             iteration = saved_iteration
             excluded_items = saved_excluded_items
         else:
-            # 新規開始 - 新しいセッションIDを生成
-            session_id = self.data_manager.generate_session_id()
+            # 新規開始 - 新しいPhase1 IDを生成
+            phase1_id = self.data_manager.generate_phase1_id()
             iteration = 0
             excluded_items = []  # 新セッションは空の除外リストから開始
 
-            # セッションメタデータを保存
+            # Phase1セッション情報を保存
             from datetime import datetime
-            self.data_manager.save_session_metadata(
-                session_id=session_id,
+            self.data_manager.save_phase1_session(
+                phase1_id=phase1_id,
                 paper_id=paper_id,
-                phase1_start=datetime.now().isoformat(),
+                started_at=datetime.now().isoformat(),
+                status="in_progress",
             )
 
             await websocket.send_json({
                 "type": "log",
-                "message": f"新しいセッションを開始: {session_id}",
+                "message": f"新しいPhase1を開始: {phase1_id}",
                 "level": "info"
             })
 
@@ -157,7 +160,7 @@ class WebSocketPhase1Adapter:
 
                 # LLM呼び出しを記録
                 self.data_manager.record_llm_call(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase="phase1",
                     iteration=iteration,
@@ -199,7 +202,7 @@ class WebSocketPhase1Adapter:
                 stopped_reason = "no_issues"
 
                 self.data_manager.record_iteration(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase="phase1",
                     iteration=iteration,
@@ -233,7 +236,7 @@ class WebSocketPhase1Adapter:
 
                 # パース失敗を記録
                 self.data_manager.record_parse_failure(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase="phase1",
                     iteration=iteration,
@@ -250,7 +253,7 @@ class WebSocketPhase1Adapter:
 
                 # ユーザー選択を記録
                 self.data_manager.record_user_action(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase="phase1",
                     iteration=iteration,
@@ -285,7 +288,7 @@ class WebSocketPhase1Adapter:
 
                 # 検出された指摘とユーザーアクションを記録
                 self.data_manager.record_detected_issue(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase="phase1",
                     iteration=iteration,
@@ -299,7 +302,7 @@ class WebSocketPhase1Adapter:
 
                 # ユーザーアクションを記録
                 self.data_manager.record_user_action(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase="phase1",
                     iteration=iteration,
@@ -308,37 +311,7 @@ class WebSocketPhase1Adapter:
                     context=f"issue_{issue.issue_number}/{len(issues)}",
                 )
 
-                if action == "A":
-                    # 自動適用
-                    await websocket.send_json({
-                        "type": "log",
-                        "message": f"指摘 {issue.issue_number}: 自動適用します",
-                        "level": "info"
-                    })
-
-                    success = self.paper_manager.apply_correction(
-                        tex_path=tex_path,
-                        before_text=issue.before,
-                        after_text=issue.after,
-                        backup=True,
-                    )
-
-                    if success:
-                        detected_in_iteration.append(f"issue_{issue.issue_number}_auto")
-                        await websocket.send_json({
-                            "type": "log",
-                            "message": "修正を適用しました",
-                            "level": "success"
-                        })
-                    else:
-                        detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
-                        await websocket.send_json({
-                            "type": "log",
-                            "message": "自動適用に失敗しました。手動で修正してください。",
-                            "level": "warning"
-                        })
-
-                elif action == "M":
+                if action == "A" or action == "M":
                     # 手動修正
                     await websocket.send_json({
                         "type": "log",
@@ -371,7 +344,7 @@ class WebSocketPhase1Adapter:
                     excluded_items.append(item)
 
                     self.data_manager.record_excluded_item(
-                        session_id=session_id,
+                        session_id=phase1_id,
                         paper_id=paper_id,
                         checklist_item=item,
                         reason=reason,
@@ -416,7 +389,7 @@ class WebSocketPhase1Adapter:
                 self.data_manager.save_progress(
                     paper_id=paper_id,
                     phase="phase1",
-                    session_id=session_id,
+                    session_id=phase1_id,
                     iteration=iteration,
                     excluded_items=excluded_items,
                 )
@@ -426,21 +399,62 @@ class WebSocketPhase1Adapter:
             self.data_manager.save_progress(
                 paper_id=paper_id,
                 phase="phase1",
-                session_id=session_id,
+                session_id=phase1_id,
                 iteration=iteration,
                 excluded_items=excluded_items,
             )
 
+            # 次のイテレーションに進む前に、手動修正を確認
+            # Note: TeXファイルは同じパスなので、ユーザーが手動編集した内容が自動的に反映される
+            await websocket.send_json({
+                "type": "log",
+                "message": "手動修正がある場合は、TeXファイルを編集してから次のイテレーションに進んでください",
+                "level": "info"
+            })
+
+            # TODO: 必要に応じてPDF再生成を実装
+            # self.paper_manager.compile_tex_to_pdf(tex_path, pdf_path)
+
+        # Phase1セッション情報を更新
+        from datetime import datetime
+        final_status = "completed" if stopped_reason in ["no_issues", "user_stop"] else "aborted"
+
+        # 最終バージョンを保存
+        final_version_dir = self.versions_dir / paper_id / "phase1" / phase1_id
+        final_version_dir.mkdir(parents=True, exist_ok=True)
+
+        final_tex_path = final_version_dir / "final.tex"
+        final_pdf_path = final_version_dir / "final.pdf"
+
+        # TeXファイルをコピー
+        import shutil
+        shutil.copy2(tex_path, final_tex_path)
+        if pdf_path.exists():
+            shutil.copy2(pdf_path, final_pdf_path)
+
+        # Phase1セッション情報を更新
+        self.data_manager.update_phase1_session(
+            phase1_id=phase1_id,
+            completed_at=datetime.now().isoformat(),
+            iterations=iteration,
+            excluded_items=excluded_items,
+            status=final_status,
+            final_tex_path=str(final_tex_path),
+            final_pdf_path=str(final_pdf_path) if pdf_path.exists() else "",
+        )
+
         await websocket.send_json({
             "type": "log",
-            "message": f"フェーズ1完了 - 総イテレーション数: {iteration}",
+            "message": f"フェーズ1完了 - 総イテレーション数: {iteration}, ステータス: {final_status}",
             "level": "success"
         })
 
         return {
+            "phase1_id": phase1_id,
             "iterations": iteration,
             "excluded_items_count": len(excluded_items),
             "stopped_reason": stopped_reason,
+            "status": final_status,
         }
 
     async def get_user_action_for_issue(
@@ -647,7 +661,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
                 # LLM呼び出しを記録
                 self.data_manager.record_llm_call(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -687,7 +701,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                 stopped_reason = "no_issues"
 
                 self.data_manager.record_iteration(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -713,7 +727,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
                 # パース失敗を記録
                 self.data_manager.record_parse_failure(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -729,7 +743,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
                 # ユーザー選択を記録
                 self.data_manager.record_user_action(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -761,7 +775,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
                 # 検出された指摘とユーザーアクションを記録
                 self.data_manager.record_detected_issue(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -775,7 +789,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
                 # ユーザーアクションを記録
                 self.data_manager.record_user_action(
-                    session_id=session_id,
+                    session_id=phase1_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -842,7 +856,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                     excluded_items.append(item)
 
                     self.data_manager.record_excluded_item(
-                        session_id=session_id,
+                        session_id=phase1_id,
                         paper_id=paper_id,
                         checklist_item=item,
                         reason=reason,
