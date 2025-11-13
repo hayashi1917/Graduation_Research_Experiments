@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useAppStore } from '@/lib/store';
-import { Copy, CheckCircle, AlertCircle, Edit, SkipForward, XCircle } from 'lucide-react';
+import { Copy, CheckCircle, AlertCircle, SkipForward, XCircle } from 'lucide-react';
 import { copyToClipboard } from '@/lib/utils';
 import { WebSocketManager } from '@/lib/websocket';
 import toast from 'react-hot-toast';
@@ -146,14 +146,14 @@ export default function IssueCard({ wsManager }: IssueCardProps) {
       {isRunning && wsManager && (
         <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
           <h3 className="text-sm font-semibold text-gray-900 mb-3">この指摘への対応を選択してください：</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {/* Manual */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            {/* Accept */}
             <button
-              onClick={() => handleAction('M', '手動修正')}
-              className="flex items-center justify-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              onClick={() => handleAction('A', '承認')}
+              className="flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
             >
-              <Edit className="w-4 h-4" />
-              <span>手動修正 (M)</span>
+              <CheckCircle className="w-4 h-4" />
+              <span>承認 (A)</span>
             </button>
 
             {/* Skip */}
@@ -175,7 +175,7 @@ export default function IssueCard({ wsManager }: IssueCardProps) {
             </button>
           </div>
           <p className="text-xs text-gray-600 mt-3">
-            ※ 手動修正: 後で手動で修正 | スキップ: 誤検出として該当項目を除外 | 中断: フェーズを終了
+            ※ 承認: 正しい指摘として記録 | スキップ: 誤検出として該当項目を除外 | 中断: フェーズを終了
           </p>
         </div>
       )}

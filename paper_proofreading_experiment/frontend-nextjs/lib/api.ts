@@ -20,11 +20,10 @@ export const papersAPI = {
     return response.data;
   },
 
-  upload: async (paperId: string, pdfFile: File, texFile: File) => {
+  upload: async (paperId: string, pdfFile: File) => {
     const formData = new FormData();
     formData.append('paper_id', paperId);
     formData.append('pdf_file', pdfFile);
-    formData.append('tex_file', texFile);
 
     const response = await api.post('/api/papers/upload', formData, {
       headers: {

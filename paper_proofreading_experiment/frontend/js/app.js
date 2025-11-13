@@ -57,10 +57,8 @@ function setupEventListeners() {
     document.getElementById('phase3-btn').addEventListener('click', () => startPhase('phase3'));
 
     // 指摘判断ボタン
-    document.getElementById('action-auto').addEventListener('click', () => sendAction('A'));
-    document.getElementById('action-manual').addEventListener('click', () => sendAction('M'));
+    document.getElementById('action-accept').addEventListener('click', () => sendAction('A'));
     document.getElementById('action-skip').addEventListener('click', () => sendAction('S'));
-    document.getElementById('action-difficult').addEventListener('click', () => sendAction('D'));
     document.getElementById('action-quit').addEventListener('click', () => sendAction('Q'));
 
     // コピーボタン
@@ -117,8 +115,7 @@ function displayPapers(papers) {
     papersList.innerHTML = papers.map(paper => `
         <div class="paper-item" data-paper-id="${paper.id}">
             <div class="fw-bold">${paper.id}</div>
-            <small>PDF: ${paper.pdf}</small><br>
-            <small>TeX: ${paper.tex}</small>
+            <small>PDF: ${paper.pdf}</small>
         </div>
     `).join('');
 
@@ -162,9 +159,8 @@ async function selectPaper(paperId) {
 async function handleUpload() {
     const paperId = document.getElementById('paper-id-input').value;
     const pdfFile = document.getElementById('pdf-file-input').files[0];
-    const texFile = document.getElementById('tex-file-input').files[0];
 
-    if (!paperId || !pdfFile || !texFile) {
+    if (!paperId || !pdfFile) {
         alert('すべての項目を入力してください');
         return;
     }
@@ -172,7 +168,7 @@ async function handleUpload() {
     try {
         addLogMessage(`論文をアップロード中: ${paperId}`, 'info');
 
-        const result = await API.uploadPaper(paperId, pdfFile, texFile);
+        const result = await API.uploadPaper(paperId, pdfFile);
 
         addLogMessage(`アップロード成功: ${result.message}`, 'success');
 

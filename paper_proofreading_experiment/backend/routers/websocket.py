@@ -132,11 +132,10 @@ async def execute_phase(
         paper_dir = papers_dir / paper_id
         logger.info(f"論文ディレクトリ: {paper_dir}")
         pdf_files = list(paper_dir.glob("*.pdf"))
-        tex_files = list(paper_dir.glob("*.tex"))
-        logger.info(f"PDFファイル: {pdf_files}, TeXファイル: {tex_files}")
+        logger.info(f"PDFファイル: {pdf_files}")
 
-        if not pdf_files or not tex_files:
-            error_msg = "論文ファイルが見つかりません"
+        if not pdf_files:
+            error_msg = "論文ファイル(PDF)が見つかりません"
             logger.error(f"{error_msg}: paper_dir={paper_dir}")
             await manager.send_message({
                 "type": "error",
@@ -145,8 +144,7 @@ async def execute_phase(
             return
 
         pdf_path = pdf_files[0]
-        tex_path = tex_files[0]
-        logger.info(f"使用ファイル: PDF={pdf_path}, TeX={tex_path}")
+        logger.info(f"使用ファイル: PDF={pdf_path}")
 
         # LLMクライアントの初期化
         if phase in ["phase1", "phase3"]:
@@ -179,17 +177,17 @@ async def execute_phase(
         logger.info(f"フェーズ実行関数呼び出し: phase={phase}")
         if phase == "phase1":
             await execute_phase1(
-                paper_id, pdf_path, tex_path, llm_client, websocket, client_id,
+                paper_id, pdf_path, llm_client, websocket, client_id,
                 data_manager, paper_manager, settings, versions_dir
             )
         elif phase == "phase2":
             await execute_phase2(
-                paper_id, pdf_path, tex_path, llm_client, websocket, client_id,
+                paper_id, pdf_path, llm_client, websocket, client_id,
                 data_manager, settings
             )
         elif phase == "phase3":
             await execute_phase3(
-                paper_id, pdf_path, tex_path, llm_client, websocket, client_id,
+                paper_id, pdf_path, llm_client, websocket, client_id,
                 data_manager, paper_manager, settings
             )
         logger.info(f"フェーズ実行完了: phase={phase}")
@@ -205,7 +203,7 @@ async def execute_phase(
 
 
 async def execute_phase1(
-    paper_id: str, pdf_path: Path, tex_path: Path, llm_client, websocket: WebSocket,
+    paper_id: str, pdf_path: Path, llm_client, websocket: WebSocket,
     client_id: str, data_manager, paper_manager, settings, versions_dir: Path
 ):
     """フェーズ1を実行"""
@@ -238,7 +236,6 @@ async def execute_phase1(
         result = await adapter.run(
             paper_id=paper_id,
             pdf_path=pdf_path,
-            tex_path=tex_path,
             websocket=websocket,
         )
         logger.info(f"adapter.run()が完了しました: result={result}")
@@ -267,7 +264,7 @@ async def execute_phase1(
 
 
 async def execute_phase2(
-    paper_id: str, pdf_path: Path, tex_path: Path, llm_client, websocket: WebSocket,
+    paper_id: str, pdf_path: Path, llm_client, websocket: WebSocket,
     client_id: str, data_manager, settings
 ):
     """フェーズ2を実行"""
@@ -294,7 +291,6 @@ async def execute_phase2(
         result = await adapter.run(
             paper_id=paper_id,
             pdf_path=pdf_path,
-            tex_path=tex_path,
             websocket=websocket,
         )
 
@@ -318,7 +314,7 @@ async def execute_phase2(
 
 
 async def execute_phase3(
-    paper_id: str, pdf_path: Path, tex_path: Path, llm_client, websocket: WebSocket,
+    paper_id: str, pdf_path: Path, llm_client, websocket: WebSocket,
     client_id: str, data_manager, paper_manager, settings
 ):
     """フェーズ3を実行"""
@@ -345,7 +341,6 @@ async def execute_phase3(
         result = await adapter.run(
             paper_id=paper_id,
             pdf_path=pdf_path,
-            tex_path=tex_path,
             websocket=websocket,
         )
 
