@@ -321,12 +321,27 @@ class WebSocketPhase1Adapter:
                     detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
 
                 elif action == "S":
-                    # スキップ
+                    # スキップ（該当項目を除外）
                     await websocket.send_json({
                         "type": "log",
-                        "message": f"指摘 {issue.issue_number}: スキップ（誤検出として記録）",
+                        "message": f"指摘 {issue.issue_number}: スキップ（該当項目を除外）",
                         "level": "info"
                     })
+
+                    # チェックリスト項目を除外（簡略化のため固定値）
+                    item = f"item_issue_{issue.issue_number}"
+                    reason = "スキップ（誤検出）"
+
+                    new_excluded.append(item)
+                    excluded_items.append(item)
+
+                    self.data_manager.record_excluded_item(
+                        session_id=phase1_id,
+                        paper_id=paper_id,
+                        checklist_item=item,
+                        reason=reason,
+                        example_case=f"phase1_iteration_{iteration}_issue{issue.issue_number}",
+                    )
 
                 elif action == "Q":
                     # 中断
@@ -813,11 +828,27 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                     detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
 
                 elif action == "S":
+                    # スキップ（該当項目を除外）
                     await websocket.send_json({
                         "type": "log",
-                        "message": f"指摘 {issue.issue_number}: スキップ",
+                        "message": f"指摘 {issue.issue_number}: スキップ（該当項目を除外）",
                         "level": "info"
                     })
+
+                    # チェックリスト項目を除外（簡略化のため固定値）
+                    item = f"item_issue_{issue.issue_number}"
+                    reason = "スキップ（誤検出）"
+
+                    new_excluded.append(item)
+                    excluded_items.append(item)
+
+                    self.data_manager.record_excluded_item(
+                        session_id=session_id,
+                        paper_id=paper_id,
+                        checklist_item=item,
+                        reason=reason,
+                        example_case=f"{phase}_iteration_{iteration}_issue{issue.issue_number}",
+                    )
 
                 elif action == "Q":
                     await websocket.send_json({

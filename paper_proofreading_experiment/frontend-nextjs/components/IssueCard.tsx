@@ -175,7 +175,7 @@ export default function IssueCard({ wsManager }: IssueCardProps) {
             </button>
           </div>
           <p className="text-xs text-gray-600 mt-3">
-            ※ 自動適用: 提案された修正を自動で適用 | 手動修正: 後で手動で修正 | スキップ: 誤検出として無視 | 中断: フェーズを終了
+            ※ 自動適用: 提案された修正を自動で適用 | 手動修正: 後で手動で修正 | スキップ: 誤検出として該当項目を除外 | 中断: フェーズを終了
           </p>
         </div>
       )}

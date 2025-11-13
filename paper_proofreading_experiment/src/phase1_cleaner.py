@@ -158,7 +158,7 @@ class Phase1Cleaner:
             print("\n各指摘について判断してください:")
             print("  [A] 適用: 正しい指摘なので反映（自動適用）")
             print("  [M] 手動: 手動で修正")
-            print("  [S] スキップ: 誤検出")
+            print("  [S] スキップ: 誤検出として該当項目を除外")
             print("  [Q] 中断: クリーン化を中断")
 
             # インタラクティブな判断
@@ -202,7 +202,22 @@ class Phase1Cleaner:
                     detected_in_iteration.append(f"issue_{issue.issue_number}_manual")
 
                 elif action == "S":
-                    print("→ スキップします（誤検出として記録）。")
+                    print("→ スキップします（誤検出として該当項目を除外）。")
+
+                    # チェックリスト項目を入力
+                    item = input("除外するチェックリスト項目名: ").strip()
+                    reason = input("除外理由（短く）: ").strip()
+
+                    new_excluded.append(item)
+                    excluded_items.append(item)
+
+                    # 除外項目を記録
+                    self.data_manager.record_excluded_item(
+                        paper_id=paper_id,
+                        checklist_item=item,
+                        reason=reason,
+                        example_case=f"phase1_iteration_{iteration}_issue{issue.issue_number}",
+                    )
 
                 elif action == "Q":
                     print("\nクリーン化を中断します。")
