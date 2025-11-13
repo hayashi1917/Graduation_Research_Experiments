@@ -12,7 +12,7 @@ import os
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from llm_client import GeminiClient, ClaudeClient
-from websocket_adapters import WebSocketPhase1Adapter, WebSocketPhase2Adapter, WebSocketPhase3Adapter
+from ..websocket_adapters import WebSocketPhase1Adapter, WebSocketPhase2Adapter, WebSocketPhase3Adapter
 
 router = APIRouter()
 
