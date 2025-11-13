@@ -58,30 +58,30 @@ class ResponseParser:
         Returns:
             ProofreadingIssueのリスト
         """
-        # 「指摘事項はありません」が含まれている場合は空リストを返す
-        if "指摘事項はありません" in response:
-            return []
-
         # まずJSON形式でのパースを試みる（最も信頼性が高い）
         issues = self._try_parse_json(response)
-        if issues:
+        if issues is not None:  # Noneの場合のみフォールバック
             return issues
 
-        # JSON失敗時は正規表現によるパースを試みる
+        # JSON失敗時は正規表現によるパースを試みる（レガシー互換性のため）
         issues = self._try_parse_with_regex(response)
         return issues
 
-    def _try_parse_json(self, response: str) -> List[ProofreadingIssue]:
+    def _try_parse_json(self, response: str) -> Optional[List[ProofreadingIssue]]:
         """
         JSON形式でのパースを試みる
 
         LLMがJSON形式で応答した場合、それを優先的に使用する
+
+        Returns:
+            ProofreadingIssueのリスト、またはパース失敗時はNone
         """
         # JSONブロックを抽出（```json ... ``` または { ... }）
         json_patterns = [
             r'```json\s*(\{.*?\}|\[.*?\])\s*```',
             r'```\s*(\{.*?\}|\[.*?\])\s*```',
             r'(\{[\s\S]*?"issues"[\s\S]*?\})',
+            r'(\{[\s\S]*?"no_issues"[\s\S]*?\})',
             r'(\[[\s\S]*?\])',
         ]
 
@@ -103,35 +103,57 @@ class ResponseParser:
                                 issues.append(ProofreadingIssue(**item))
                             except Exception:
                                 continue
-                        if issues:
-                            return issues
+                        return issues  # 空リストでも返す
 
-                    # データが辞書でissuesキーを持つ場合
+                    # データが辞書の場合
                     elif isinstance(data, dict):
-                        if 'issues' in data:
-                            issues = []
-                            for i, item in enumerate(data['issues'], 1):
-                                if 'issue_number' not in item:
-                                    item['issue_number'] = i
-                                try:
-                                    issues.append(ProofreadingIssue(**item))
-                                except Exception:
-                                    continue
-                            if issues:
+                        # ProofreadingResponseモデルを使ってパース
+                        try:
+                            # no_issuesフラグがある場合
+                            if 'no_issues' in data:
+                                if data['no_issues'] is True:
+                                    # 修正点なし
+                                    return []
+                                # no_issues: false の場合、issuesを処理
+                                elif 'issues' in data:
+                                    issues = []
+                                    for i, item in enumerate(data['issues'], 1):
+                                        if 'issue_number' not in item:
+                                            item['issue_number'] = i
+                                        try:
+                                            issues.append(ProofreadingIssue(**item))
+                                        except Exception:
+                                            continue
+                                    return issues
+
+                            # issuesキーがある場合（no_issuesフィールドなし）
+                            elif 'issues' in data:
+                                issues = []
+                                for i, item in enumerate(data['issues'], 1):
+                                    if 'issue_number' not in item:
+                                        item['issue_number'] = i
+                                    try:
+                                        issues.append(ProofreadingIssue(**item))
+                                    except Exception:
+                                        continue
                                 return issues
-                        # 単一の指摘の場合
-                        elif all(k in data for k in ['before', 'after', 'reasoning']):
-                            if 'issue_number' not in data:
-                                data['issue_number'] = 1
-                            try:
-                                return [ProofreadingIssue(**data)]
-                            except Exception:
-                                pass
+
+                            # 単一の指摘の場合
+                            elif all(k in data for k in ['before', 'after', 'reasoning']):
+                                if 'issue_number' not in data:
+                                    data['issue_number'] = 1
+                                try:
+                                    return [ProofreadingIssue(**data)]
+                                except Exception:
+                                    pass
+
+                        except Exception:
+                            continue
 
                 except (json.JSONDecodeError, Exception):
                     continue
 
-        return []
+        return None  # パース失敗
 
     def _try_parse_with_regex(self, response: str) -> List[ProofreadingIssue]:
         """
