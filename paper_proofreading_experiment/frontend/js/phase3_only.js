@@ -99,6 +99,7 @@ form.addEventListener('submit', async (event) => {
     const excludedItems = document.getElementById('excluded-items').value.trim();
 
     if (!paperId || !texFile || !pdfFile) {
+
         showStatus('すべての項目を入力してください。', 'danger');
         return;
     }

@@ -142,7 +142,6 @@ async def read_phase3_only():
         raise HTTPException(status_code=404, detail="phase3_only.html が見つかりません")
     return FileResponse(page_path)
 
-
 def _normalize_excluded_items(raw_items: str) -> Dict[str, object]:
     """入力された除外項目文字列を整形"""
 
@@ -234,6 +233,7 @@ async def proofread_once(
         "status": "success",
         "message": message,
         **result_payload,
+
     }
 
 
