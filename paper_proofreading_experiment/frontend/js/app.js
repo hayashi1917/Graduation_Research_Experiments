@@ -120,7 +120,7 @@ function displayPapers(papers) {
 /**
  * 論文を選択
  */
-function selectPaper(paperId) {
+async function selectPaper(paperId) {
     AppState.selectedPaperId = paperId;
 
     // UIを更新
@@ -135,6 +135,9 @@ function selectPaper(paperId) {
     document.getElementById('phase3-btn').disabled = false;
 
     addLogMessage(`論文を選択しました: ${paperId}`, 'info');
+
+    // セッションを読み込み
+    await loadSessions(paperId);
 
     // イテレーション履歴を読み込み
     loadIterations(paperId);
@@ -252,6 +255,14 @@ function handleWebSocketMessage(data) {
             enablePhaseButtons();
             AppState.isRunning = false;
             loadIterations(AppState.selectedPaperId);
+            loadSessions(AppState.selectedPaperId); // セッションを再読み込み
+            break;
+
+        case 'embedded_error':
+            // Phase2で埋め込まれた誤りを表示
+            if (data.error) {
+                addLogMessage(`誤り ${data.index}/${data.total}: ${data.error.checklist_item} - ${data.error.category}`, 'info');
+            }
             break;
 
         case 'error':
@@ -489,6 +500,144 @@ async function saveSettings() {
     } catch (error) {
         addLogMessage('設定の保存エラー: ' + error.message, 'error');
     }
+}
+
+/**
+ * セッション一覧を読み込み
+ */
+async function loadSessions(paperId) {
+    try {
+        const data = await API.getSessions(paperId);
+        displaySessions(paperId, data.sessions);
+    } catch (error) {
+        console.error('セッション一覧の読み込みエラー:', error);
+        addLogMessage('セッション一覧の読み込みに失敗しました', 'error');
+    }
+}
+
+/**
+ * セッション一覧を表示
+ */
+function displaySessions(paperId, sessions) {
+    document.getElementById('sessions-paper-id').textContent = paperId;
+    document.getElementById('sessions-card').style.display = 'block';
+
+    const tbody = document.getElementById('sessions-tbody');
+
+    if (sessions.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center text-muted">
+                    セッションがありません。Phase1を実行して新しいセッションを作成してください。
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = sessions.map(session => {
+        const phase1Badge = session.phase1_complete
+            ? '<span class="badge bg-success"><i class="bi bi-check-circle"></i> 完了</span>'
+            : '<span class="badge bg-secondary">未実行</span>';
+
+        const phase2Badge = session.phase2_complete
+            ? '<span class="badge bg-success"><i class="bi bi-check-circle"></i> 完了</span>'
+            : '<span class="badge bg-secondary">未実行</span>';
+
+        const phase3Badge = session.phase3_complete
+            ? '<span class="badge bg-success"><i class="bi bi-check-circle"></i> 完了</span>'
+            : '<span class="badge bg-secondary">未実行</span>';
+
+        const detectionRate = session.phase3_complete
+            ? '<button class="btn btn-sm btn-outline-primary" onclick="loadDetectionRates(\'' + paperId + '\', \'' + session.session_id + '\')">表示</button>'
+            : '<span class="text-muted">-</span>';
+
+        return `
+            <tr>
+                <td><code>${session.session_id}</code></td>
+                <td>${phase1Badge}</td>
+                <td>${phase2Badge}</td>
+                <td>${phase3Badge}</td>
+                <td>${detectionRate}</td>
+                <td>
+                    <small class="text-muted">${new Date(session.phase1_start).toLocaleString('ja-JP')}</small>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    addLogMessage(`${sessions.length}件のセッションを表示しました`, 'info');
+}
+
+/**
+ * 検出率を読み込み
+ */
+async function loadDetectionRates(paperId, sessionId) {
+    try {
+        addLogMessage(`検出率を計算中: セッション ${sessionId}`, 'info');
+
+        const data = await API.getDetectionRates(paperId, sessionId);
+        displayDetectionRates(data);
+
+        addLogMessage(`検出率の計算が完了しました`, 'success');
+    } catch (error) {
+        console.error('検出率の読み込みエラー:', error);
+        addLogMessage('検出率の読み込みに失敗しました: ' + error.message, 'error');
+    }
+}
+
+/**
+ * 検出率を表示
+ */
+function displayDetectionRates(data) {
+    document.getElementById('detection-rates-card').style.display = 'block';
+
+    // 全体統計
+    document.getElementById('total-embedded').textContent = data.total_embedded;
+    document.getElementById('total-detected').textContent = data.total_detected;
+    document.getElementById('detection-rate').textContent = data.detection_rate.toFixed(1) + '%';
+
+    // 項目別検出状況
+    const tbody = document.getElementById('items-detection-tbody');
+
+    if (!data.items_detection || Object.keys(data.items_detection).length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4" class="text-center text-muted">
+                    データがありません
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = Object.entries(data.items_detection).map(([item, info]) => {
+        const itemRate = info.total_count > 0
+            ? ((info.detected_count / info.total_count) * 100).toFixed(1)
+            : '0.0';
+
+        const iterationText = info.first_detected_iteration > 0
+            ? info.first_detected_iteration
+            : '<span class="text-muted">未検出</span>';
+
+        const rowClass = info.detected_count === info.total_count
+            ? 'table-success'
+            : info.detected_count > 0
+            ? 'table-warning'
+            : '';
+
+        return `
+            <tr class="${rowClass}">
+                <td><code>${item}</code></td>
+                <td>${info.detected_count} / ${info.total_count}</td>
+                <td><strong>${itemRate}%</strong></td>
+                <td>${iterationText}</td>
+            </tr>
+        `;
+    }).join('');
+
+    // 検出率カードまでスクロール
+    document.getElementById('detection-rates-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 /**

@@ -74,6 +74,98 @@
 
             <!-- メインエリア -->
             <div class="col-md-9">
+                <!-- セッション管理カード -->
+                <div class="card mb-3" id="sessions-card" style="display: none;">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-list-check"></i> セッション管理</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <strong>論文ID:</strong> <span id="sessions-paper-id">-</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover" id="sessions-table">
+                                <thead>
+                                    <tr>
+                                        <th>セッションID</th>
+                                        <th>Phase1</th>
+                                        <th>Phase2</th>
+                                        <th>Phase3</th>
+                                        <th>検出率</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sessions-tbody">
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted">
+                                            セッションがありません
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="alert alert-info mb-0">
+                            <i class="bi bi-info-circle"></i>
+                            <strong>注意:</strong> Phase1を実行すると新しいセッションが作成されます。Phase2/Phase3は最新のセッションを使用します。
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 検出率表示カード -->
+                <div class="card mb-3" id="detection-rates-card" style="display: none;">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> 検出率</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h6 class="card-title">埋め込み総数</h6>
+                                        <h3 id="total-embedded">-</h3>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h6 class="card-title">検出数</h6>
+                                        <h3 id="total-detected">-</h3>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-center bg-success text-white">
+                                    <div class="card-body">
+                                        <h6 class="card-title">検出率</h6>
+                                        <h3 id="detection-rate">-%</h3>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <h6>チェックリスト項目別検出状況</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm" id="items-detection-table">
+                                <thead>
+                                    <tr>
+                                        <th>チェックリスト項目</th>
+                                        <th>検出数 / 総数</th>
+                                        <th>検出率</th>
+                                        <th>最初の検出イテレーション</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="items-detection-tbody">
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted">
+                                            データがありません
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 実行状態 -->
                 <div class="card mb-3" id="status-card" style="display: none;">
                     <div class="card-header bg-info text-white">
