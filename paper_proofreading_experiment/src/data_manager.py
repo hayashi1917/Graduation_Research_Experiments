@@ -30,6 +30,7 @@ class DataManager:
         self.parse_failures_csv = self.results_dir / "parse_failures.csv"
         self.llm_calls_csv = self.results_dir / "llm_calls.csv"
         self.user_actions_csv = self.results_dir / "user_actions.csv"
+        self.detection_rates_csv = self.results_dir / "detection_rates.csv"
 
         # 進捗ファイルのパス
         self.progress_file = self.results_dir / "progress.json"
@@ -167,6 +168,21 @@ class DataManager:
                     "action_type",
                     "action_value",
                     "context",
+                    "timestamp",
+                ])
+
+        # detection_rates.csv
+        if not self.detection_rates_csv.exists():
+            with open(self.detection_rates_csv, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "session_id",
+                    "paper_id",
+                    "phase",
+                    "iteration",
+                    "checklist_item",
+                    "detected_iteration",
+                    "cumulative_detection_rate",
                     "timestamp",
                 ])
 
@@ -393,6 +409,134 @@ class DataManager:
                 excluded_items_count,
                 completion_time,
             ])
+
+    def record_detection_rate(
+        self,
+        session_id: str,
+        paper_id: str,
+        phase: str,
+        iteration: int,
+        checklist_item: str,
+        detected_iteration: int,
+        cumulative_detection_rate: float,
+    ):
+        """検出率情報を記録"""
+        timestamp = datetime.now().isoformat()
+
+        with open(self.detection_rates_csv, "a", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                session_id,
+                paper_id,
+                phase,
+                iteration,
+                checklist_item,
+                detected_iteration,
+                cumulative_detection_rate,
+                timestamp,
+            ])
+
+    def calculate_detection_rates(
+        self, session_id: str, paper_id: str, phase: str, current_iteration: int
+    ) -> Dict[str, Any]:
+        """指定されたセッションとイテレーションまでの検出率を計算
+
+        Args:
+            session_id: セッションID
+            paper_id: 論文ID
+            phase: フェーズ (phase3)
+            current_iteration: 現在のイテレーション番号
+
+        Returns:
+            {
+                "total_embedded": 埋め込まれた誤りの総数,
+                "total_detected": 検出された誤りの総数,
+                "detection_rate": 全体検出率（%）,
+                "items_detection": {
+                    "checklist_item": {
+                        "detected_iteration": 検出されたイテレーション番号 (0=未検出),
+                        "detected": True/False
+                    },
+                    ...
+                }
+            }
+        """
+        # 埋め込まれた誤りを取得（このセッションのみ）
+        embedded_errors = {}
+        if self.embedded_errors_csv.exists():
+            with open(self.embedded_errors_csv, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row["session_id"] == session_id and row["paper_id"] == paper_id:
+                        error_id = row["error_id"]
+                        embedded_errors[error_id] = {
+                            "checklist_item": row["checklist_item"],
+                            "before": row["before"],
+                            "after": row["after"],
+                            "detected_iteration": 0,  # 0 = 未検出
+                            "detected": False,
+                        }
+
+        # 検出された指摘事項を取得（このセッション、フェーズ、current_iterationまで）
+        if self.detected_issues_csv.exists():
+            with open(self.detected_issues_csv, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if (
+                        row["session_id"] == session_id
+                        and row["paper_id"] == paper_id
+                        and row["phase"] == phase
+                        and int(row["iteration"]) <= current_iteration
+                        and row["user_action"] == "accept"  # acceptされた指摘のみ
+                    ):
+                        detected_before = row["before"]
+                        detected_after = row["after"]
+                        iteration_num = int(row["iteration"])
+
+                        # 埋め込まれた誤りとマッチング（before/afterの類似性で判定）
+                        for error_id, error_info in embedded_errors.items():
+                            if not error_info["detected"]:
+                                # 単純な文字列マッチング（実際にはより高度なマッチングが必要かも）
+                                if (
+                                    error_info["before"].strip() in detected_before.strip()
+                                    or detected_before.strip() in error_info["before"].strip()
+                                ):
+                                    embedded_errors[error_id]["detected"] = True
+                                    embedded_errors[error_id]["detected_iteration"] = iteration_num
+
+        # 検出率を計算
+        total_embedded = len(embedded_errors)
+        total_detected = sum(1 for e in embedded_errors.values() if e["detected"])
+        detection_rate = (total_detected / total_embedded * 100) if total_embedded > 0 else 0.0
+
+        # チェックリスト項目ごとの検出情報を整理
+        items_detection = {}
+        for error_id, error_info in embedded_errors.items():
+            item = error_info["checklist_item"]
+            if item not in items_detection:
+                items_detection[item] = {
+                    "detected_count": 0,
+                    "total_count": 0,
+                    "first_detected_iteration": 0,
+                }
+
+            items_detection[item]["total_count"] += 1
+            if error_info["detected"]:
+                items_detection[item]["detected_count"] += 1
+                # 最初に検出されたイテレーションを記録
+                if (
+                    items_detection[item]["first_detected_iteration"] == 0
+                    or error_info["detected_iteration"] < items_detection[item]["first_detected_iteration"]
+                ):
+                    items_detection[item]["first_detected_iteration"] = error_info["detected_iteration"]
+
+        return {
+            "total_embedded": total_embedded,
+            "total_detected": total_detected,
+            "detection_rate": detection_rate,
+            "items_detection": items_detection,
+            "embedded_errors": embedded_errors,  # 詳細情報も返す
+        }
 
     def get_embedded_errors(self, paper_id: str) -> List[Dict[str, Any]]:
         """指定された論文の埋め込まれた誤りを取得"""

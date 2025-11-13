@@ -108,4 +108,32 @@ const API = {
             throw error;
         }
     },
+
+    /**
+     * セッション一覧を取得
+     */
+    async getSessions(paperId) {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/sessions/${paperId}`);
+            if (!response.ok) throw new Error('セッション一覧の取得に失敗しました');
+            return await response.json();
+        } catch (error) {
+            console.error('getSessions error:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * 検出率を取得
+     */
+    async getDetectionRates(paperId, sessionId) {
+        try {
+            const response = await fetch(`${this.baseUrl}/api/detection_rates/${paperId}/${sessionId}`);
+            if (!response.ok) throw new Error('検出率の取得に失敗しました');
+            return await response.json();
+        } catch (error) {
+            console.error('getDetectionRates error:', error);
+            throw error;
+        }
+    },
 };

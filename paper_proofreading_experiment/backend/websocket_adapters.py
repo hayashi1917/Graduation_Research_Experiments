@@ -17,6 +17,7 @@ from llm_client import LLMClient
 from data_manager import DataManager
 from response_parser import ResponseParser, ProofreadingIssue
 from paper_manager import PaperManager
+from phase2_embedder import Phase2Embedder
 
 
 class WebSocketPhase1Adapter:
@@ -904,4 +905,225 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
             "iterations": iteration,
             "excluded_items_count": len(excluded_items),
             "stopped_reason": stopped_reason,
+        }
+
+
+class WebSocketPhase2Adapter:
+    """フェーズ2のWebSocketアダプター（誤り埋め込み）"""
+
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        data_manager: DataManager,
+        prompt_template: str,
+        checklist: str,
+        num_errors: int = 10,
+    ):
+        self.llm_client = llm_client
+        self.data_manager = data_manager
+        self.prompt_template = prompt_template
+        self.checklist = checklist
+        self.num_errors = num_errors
+
+    async def run(
+        self,
+        paper_id: str,
+        pdf_path: Path,
+        tex_path: Path,
+        websocket: WebSocket,
+    ) -> Dict[str, Any]:
+        """誤り埋め込みを実行（WebSocket版）"""
+
+        await websocket.send_json({
+            "type": "log",
+            "message": f"フェーズ2: 誤り埋め込みを開始 - {paper_id}",
+            "level": "info"
+        })
+
+        # 最新のセッションIDを取得（Phase1で作成されたもの）
+        session_id = self.data_manager.get_latest_session_id(paper_id)
+        if not session_id:
+            # セッションが存在しない場合はエラー
+            await websocket.send_json({
+                "type": "error",
+                "message": "エラー: Phase1のセッションが見つかりません。先にPhase1を実行してください。",
+            })
+            raise ValueError("Phase1のセッションが見つかりません")
+
+        await websocket.send_json({
+            "type": "log",
+            "message": f"セッション {session_id} を使用します",
+            "level": "info"
+        })
+
+        # セッションIDに紐づく除外項目を取得
+        excluded_items = self.data_manager.get_excluded_items(paper_id, session_id)
+
+        await websocket.send_json({
+            "type": "log",
+            "message": f"除外項目: {len(excluded_items)}件",
+            "level": "info"
+        })
+
+        # Phase2Embedderを作成
+        embedder = Phase2Embedder(
+            llm_client=self.llm_client,
+            data_manager=self.data_manager,
+            prompt_template=self.prompt_template,
+            checklist=self.checklist,
+            num_errors=self.num_errors,
+            excluded_items=excluded_items,
+        )
+
+        # 除外項目のリストを文字列に変換
+        excluded_items_str = "\n".join(
+            [f"- {item}" for item in excluded_items]
+        ) if excluded_items else "なし"
+
+        # プロンプトを構築
+        prompt = self.prompt_template.format(
+            excluded_items=excluded_items_str,
+            checklist=self.checklist,
+        )
+
+        # LLMを呼び出す
+        await websocket.send_json({
+            "type": "log",
+            "message": "LLMに誤り埋め込みを依頼中...",
+            "level": "info"
+        })
+
+        # LLM呼び出しの時間を計測
+        start_time = time.time()
+        llm_success = True
+        response = ""
+
+        try:
+            response = self.llm_client.call(
+                prompt=prompt,
+                pdf_path=pdf_path,
+                tex_path=tex_path,
+            )
+        except Exception as e:
+            llm_success = False
+            response = f"Error: {str(e)}"
+            await websocket.send_json({
+                "type": "error",
+                "message": f"LLM呼び出しエラー: {str(e)}",
+            })
+            raise
+        finally:
+            duration = time.time() - start_time
+
+            # LLM呼び出しを記録
+            self.data_manager.record_llm_call(
+                session_id=session_id,
+                paper_id=paper_id,
+                phase="phase2",
+                iteration=1,
+                model=self.llm_client.model,
+                provider=getattr(self.llm_client, 'provider', 'unknown'),
+                prompt_length=len(prompt),
+                response_length=len(response),
+                duration_seconds=duration,
+                success=llm_success,
+            )
+
+        # 応答を保存
+        self.data_manager.save_response(
+            paper_id=paper_id,
+            phase="phase2",
+            iteration=1,
+            response=response,
+        )
+        self.data_manager.save_prompt(
+            paper_id=paper_id,
+            phase="phase2",
+            iteration=1,
+            prompt=prompt,
+        )
+
+        await websocket.send_json({
+            "type": "log",
+            "message": "LLMの応答を受信しました",
+            "level": "info"
+        })
+
+        # JSONを抽出してパース
+        errors = embedder._parse_errors_from_response(response)
+
+        if not errors:
+            await websocket.send_json({
+                "type": "error",
+                "message": "誤りの抽出に失敗しました。応答を確認して、手動で誤りを記録してください。",
+            })
+            return {"errors": [], "success": False, "count": 0}
+
+        # 誤りをデータベースに記録
+        await websocket.send_json({
+            "type": "log",
+            "message": f"{len(errors)}件の誤りを記録します",
+            "level": "info"
+        })
+
+        for i, error in enumerate(errors, 1):
+            # 各誤りをWebSocketで送信
+            await websocket.send_json({
+                "type": "embedded_error",
+                "error": {
+                    "error_id": error.get("error_id", i),
+                    "checklist_item": error.get("checklist_item", ""),
+                    "category": error.get("category", ""),
+                    "before": error.get("before", ""),
+                    "after": error.get("after", ""),
+                    "location": error.get("location", ""),
+                    "description": error.get("description", ""),
+                },
+                "index": i,
+                "total": len(errors),
+            })
+
+            # CSVに記録
+            self.data_manager.record_embedded_error(
+                session_id=session_id,
+                paper_id=paper_id,
+                error_id=error.get("error_id", i),
+                checklist_item=error.get("checklist_item", ""),
+                category=error.get("category", ""),
+                before=error.get("before", ""),
+                after=error.get("after", ""),
+                location=error.get("location", ""),
+            )
+
+        await websocket.send_json({
+            "type": "log",
+            "message": "誤りの記録完了",
+            "level": "success"
+        })
+
+        # セッションメタデータを更新（Phase2完了）
+        from datetime import datetime
+        # 既存のメタデータを取得して更新
+        if self.data_manager.sessions_file.exists():
+            import json
+            with open(self.data_manager.sessions_file, "r", encoding="utf-8") as f:
+                sessions_data = json.load(f)
+
+            if session_id in sessions_data and paper_id in sessions_data[session_id]:
+                sessions_data[session_id][paper_id]["phase2_end"] = datetime.now().isoformat()
+
+                with open(self.data_manager.sessions_file, "w", encoding="utf-8") as f:
+                    json.dump(sessions_data, f, ensure_ascii=False, indent=2)
+
+        await websocket.send_json({
+            "type": "log",
+            "message": f"フェーズ2完了 - 埋め込まれた誤り数: {len(errors)}",
+            "level": "success"
+        })
+
+        return {
+            "errors": errors,
+            "success": True,
+            "count": len(errors),
+            "session_id": session_id,
         }

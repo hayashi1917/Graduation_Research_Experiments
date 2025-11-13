@@ -24,7 +24,7 @@ from llm_client import LLMClient, GeminiClient, ClaudeClient
 from data_manager import DataManager
 from response_parser import ResponseParser
 from paper_manager import PaperManager
-from websocket_adapters import WebSocketPhase1Adapter, WebSocketPhase3Adapter
+from websocket_adapters import WebSocketPhase1Adapter, WebSocketPhase2Adapter, WebSocketPhase3Adapter
 
 import yaml
 
@@ -227,6 +227,80 @@ async def get_iterations(paper_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/sessions/{paper_id}")
+async def get_sessions(paper_id: str):
+    """指定された論文のセッション一覧を取得"""
+    try:
+        sessions_file = results_dir / "sessions.json"
+        if not sessions_file.exists():
+            return {"sessions": []}
+
+        with open(sessions_file, "r", encoding="utf-8") as f:
+            sessions_data = json.load(f)
+
+        # この論文に関連するセッションを抽出
+        paper_sessions = []
+        for session_id, papers in sessions_data.items():
+            if paper_id in papers:
+                session_info = papers[paper_id]
+                paper_sessions.append({
+                    "session_id": session_id,
+                    "phase1_start": session_info.get("phase1_start", ""),
+                    "phase1_end": session_info.get("phase1_end", ""),
+                    "phase2_end": session_info.get("phase2_end", ""),
+                    "phase3_end": session_info.get("phase3_end", ""),
+                    "phase1_complete": bool(session_info.get("phase1_end")),
+                    "phase2_complete": bool(session_info.get("phase2_end")),
+                    "phase3_complete": bool(session_info.get("phase3_end")),
+                })
+
+        # 新しい順にソート
+        paper_sessions.sort(key=lambda x: x["session_id"], reverse=True)
+
+        return {"sessions": paper_sessions}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/detection_rates/{paper_id}/{session_id}")
+async def get_detection_rates(paper_id: str, session_id: str):
+    """指定されたセッションの検出率を取得"""
+    try:
+        # Phase3の最終イテレーション番号を取得
+        csv_path = results_dir / "iteration_log.csv"
+        max_iteration = 0
+
+        if csv_path.exists():
+            import csv
+            with open(csv_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if (row["session_id"] == session_id and
+                        row["paper_id"] == paper_id and
+                        row["phase"] == "phase3"):
+                        max_iteration = max(max_iteration, int(row["iteration"]))
+
+        if max_iteration == 0:
+            return {
+                "total_embedded": 0,
+                "total_detected": 0,
+                "detection_rate": 0.0,
+                "items_detection": {},
+            }
+
+        # 検出率を計算
+        detection_data = data_manager.calculate_detection_rates(
+            session_id=session_id,
+            paper_id=paper_id,
+            phase="phase3",
+            current_iteration=max_iteration
+        )
+
+        return detection_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket接続"""
@@ -399,68 +473,31 @@ async def execute_phase2(
             "message": "フェーズ2: エラー埋め込みを開始",
         }, client_id)
 
-        # 除外項目を取得
-        excluded_items = data_manager.get_excluded_items(paper_id)
-        excluded_items_str = "\n".join([f"- {item}" for item in excluded_items]) if excluded_items else "なし"
-
-        # プロンプトを構築
-        prompt = prompts["prompt_b"]["template"].format(
-            num_errors=settings["experiment"]["num_errors"],
-            max_errors_per_item=settings["experiment"]["max_errors_per_item"],
-            excluded_items=excluded_items_str,
+        # WebSocketアダプターを作成
+        adapter = WebSocketPhase2Adapter(
+            llm_client=llm_client,
+            data_manager=data_manager,
+            prompt_template=prompts["prompt_b"]["template"],
             checklist=checklist,
+            num_errors=settings["experiment"]["num_errors"],
         )
 
-        # プロンプトを保存
-        data_manager.save_prompt(
+        # アダプターを登録
+        manager.set_adapter(client_id, adapter)
+
+        # 実行
+        result = await adapter.run(
             paper_id=paper_id,
-            phase="phase2",
-            iteration=1,
-            prompt=prompt,
-        )
-
-        await manager.send_message({
-            "type": "log",
-            "message": "LLMにエラー埋め込みを依頼中...",
-            "level": "info"
-        }, client_id)
-
-        # LLMを呼び出す
-        response = llm_client.call(
-            prompt=prompt,
             pdf_path=pdf_path,
             tex_path=tex_path,
+            websocket=websocket,
         )
-
-        # 応答を保存
-        data_manager.save_response(
-            paper_id=paper_id,
-            phase="phase2",
-            iteration=1,
-            response=response,
-        )
-
-        await manager.send_message({
-            "type": "llm_response",
-            "message": "LLMの応答を受信しました",
-        }, client_id)
-
-        await manager.send_message({
-            "type": "log",
-            "message": f"エラー埋め込みの提案を受信しました\n\n{response[:1000]}...",
-            "level": "info"
-        }, client_id)
-
-        await manager.send_message({
-            "type": "log",
-            "message": "手動で論文ファイルにエラーを埋め込んでください",
-            "level": "warning"
-        }, client_id)
 
         await manager.send_message({
             "type": "phase_complete",
             "phase": "phase2",
-            "message": "フェーズ2が完了しました。提案されたエラーを確認し、手動で論文に反映してください。",
+            "message": f"フェーズ2が完了しました（埋め込まれた誤り: {result['count']}件）",
+            "result": result,
         }, client_id)
 
     except Exception as e:
@@ -469,6 +506,10 @@ async def execute_phase2(
             "type": "error",
             "message": f"フェーズ2実行エラー: {str(e)}\n{traceback.format_exc()}",
         }, client_id)
+    finally:
+        # アダプターを削除
+        if client_id in manager.phase_adapters:
+            del manager.phase_adapters[client_id]
 
 
 async def execute_phase3(
