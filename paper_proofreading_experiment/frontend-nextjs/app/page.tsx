@@ -22,6 +22,7 @@ export default function Home() {
     currentPhase,
     selectedPaper,
     setCurrentIssue,
+    setTotalIssues,
     setCurrentIteration,
     setIsRunning,
     setCurrentPhase,
@@ -65,6 +66,19 @@ export default function Home() {
             addLog('ユーザーの判断が必要です', 'warning');
             if (message.issue) {
               setCurrentIssue(message.issue);
+            }
+            break;
+
+          case 'issue_detected':
+            console.log('[Page] 指摘事項検出:', message);
+            if (message.issue) {
+              setCurrentIssue(message.issue);
+            }
+            if (message.total_issues) {
+              setTotalIssues(message.total_issues);
+            }
+            if (message.issue_number && message.total_issues) {
+              addLog(`指摘事項 ${message.issue_number}/${message.total_issues} を検出`, 'info');
             }
             break;
 
@@ -123,7 +137,7 @@ export default function Home() {
         wsManager.disconnect();
       }
     };
-  }, [setPapers, addLog, setCurrentIssue, setCurrentIteration, setIsRunning, setCurrentPhase]);
+  }, [setPapers, addLog, setCurrentIssue, setTotalIssues, setCurrentIteration, setIsRunning, setCurrentPhase]);
 
   if (isLoading) {
     return (
