@@ -150,7 +150,7 @@ async def execute_phase(
         if phase in ["phase1", "phase3"]:
             llm_config = settings.settings["llm"]["proofreading"]
         else:  # phase2
-            llm_config = settings.settings["llm"]["error_embedding"]
+            llm_config = settings.settings["llm"]["embedding"]
 
         # APIキーを環境変数から取得
         provider = llm_config["provider"]
