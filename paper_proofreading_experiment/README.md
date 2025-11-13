@@ -67,17 +67,46 @@ backend/
 └── main.py            # FastAPIアプリケーション
 ```
 
-### フロントエンド
+### フロントエンド (Next.js 14)
 
-- **現在**: HTML/CSS/JavaScript (Bootstrap 5)
-- **次期**: Next.js 14 (App Router) + TypeScript + Tailwind CSS
+```
+frontend-nextjs/
+├── app/               # Next.js App Router
+│   ├── layout.tsx     # ルートレイアウト
+│   ├── page.tsx       # メインページ
+│   └── globals.css    # グローバルスタイル
+├── components/        # Reactコンポーネント
+│   ├── Header.tsx
+│   ├── PaperList.tsx
+│   ├── PhaseControls.tsx
+│   ├── Phase1Selector.tsx
+│   ├── IssueCard.tsx
+│   ├── LogOutput.tsx
+│   └── ResetModal.tsx
+├── lib/               # コアライブラリ
+│   ├── store.ts       # Zustand状態管理
+│   ├── api.ts         # APIクライアント
+│   ├── websocket.ts   # WebSocketマネージャー
+│   └── utils.ts       # ユーティリティ
+└── types/             # TypeScript型定義
+```
+
+**技術スタック**:
+- Next.js 14 (App Router)
+- TypeScript
+- Tailwind CSS
+- Zustand (状態管理)
+- Axios (HTTPクライアント)
+- React Hot Toast (通知)
+- Lucide React (アイコン)
 
 ## 環境構築
 
 ### 必要な環境
 
 - **Python**: 3.10以上
-- **Node.js**: 18.0以上（Next.jsフロントエンド用、将来）
+- **Node.js**: 18.0以上（Next.jsフロントエンド用）
+- **npm** または **yarn**: パッケージマネージャー
 - **LaTeX**: pdflatex（論文コンパイル用、オプション）
 
 ### 1. リポジトリのクローン
@@ -133,19 +162,60 @@ llm:
   model: "gemini-1.5-pro"  # or "claude-3-opus-20240229"
 ```
 
-### 5. サーバーの起動
+### 5. Next.jsフロントエンドのセットアップ
 
 ```bash
-# バックエンドサーバーを起動
+# フロントエンドディレクトリに移動
+cd frontend-nextjs
+
+# 依存パッケージをインストール
+npm install
+
+# 開発サーバーを起動（別のターミナルで）
+npm run dev
+```
+
+### 6. サーバーの起動
+
+#### ターミナル1: バックエンドサーバー
+
+```bash
+# プロジェクトルートから
 cd backend
-python -m uvicorn api:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+#### ターミナル2: フロントエンドサーバー
+
+```bash
+# プロジェクトルートから
+cd frontend-nextjs
+npm run dev
 ```
 
 サーバーが起動したら、ブラウザで以下にアクセス：
 
-- **Web UI**: http://localhost:8000
+- **Web UI (Next.js)**: http://localhost:3000
+- **API サーバー**: http://localhost:8000
 - **API ドキュメント**: http://localhost:8000/docs
 - **Health Check**: http://localhost:8000/health
+
+### 7. 本番環境でのデプロイ
+
+#### フロントエンドのビルド
+
+```bash
+cd frontend-nextjs
+npm run build
+npm start
+```
+
+#### バックエンドの起動
+
+```bash
+cd backend
+uvicorn main:app --host 0.0.0.0 --port 8000
+```
 
 ## 使い方
 
@@ -228,12 +298,18 @@ python -m uvicorn api:app --reload --host 0.0.0.0 --port 8000
 - ✅ データリセット機能
 - ✅ バックエンドのモジュール化
 - ✅ Pydanticによる型安全性
+- ✅ Next.js 14フロントエンド（TypeScript + Tailwind CSS）
+- ✅ Phase1選択ドロップダウンUI
+- ✅ Zustand状態管理
+- ✅ WebSocketリアルタイム通信
+- ✅ レスポンシブデザイン
 
-### 近日実装予定
+### 今後の改善予定
 
-- 🚧 Next.jsフロントエンド（TypeScript + Tailwind CSS）
-- 🚧 Phase1選択ドロップダウンUI
-- 🚧 sessions.jsonからphase1_sessions.jsonへの完全移行
+- 🚧 ダークモード対応
+- 🚧 ユニットテスト・E2Eテスト
+- 🚧 Docker対応
+- 🚧 CI/CDパイプライン
 
 ## ライセンス
 
