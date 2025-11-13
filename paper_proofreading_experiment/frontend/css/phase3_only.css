@@ -9,3 +9,16 @@ main {
 #status-area {
     transition: opacity 0.2s ease-in-out;
 }
+
+#issues-list .list-group-item,
+#excluded-list .list-group-item {
+    border: 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    padding-left: 0;
+    padding-right: 0;
+}
+
+#issues-list .list-group-item:last-child,
+#excluded-list .list-group-item:last-child {
+    border-bottom: 0;
+}

@@ -6,6 +6,7 @@ import asyncio
 import json
 import sys
 import os
+import re
 from pathlib import Path
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -22,7 +23,7 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from llm_client import LLMClient, GeminiClient, ClaudeClient
+from llm_client import LLMClient, GeminiClient, ClaudeClient, create_llm_client
 from data_manager import DataManager
 from response_parser import ResponseParser
 from paper_manager import PaperManager
@@ -95,9 +96,32 @@ versions_dir.mkdir(parents=True, exist_ok=True)
 logs_dir.mkdir(parents=True, exist_ok=True)
 phase3_only_dir.mkdir(parents=True, exist_ok=True)
 
+_proofreading_llm_client: Optional[LLMClient] = None
+_phase3_parser = ResponseParser()
+
+
+def get_proofreading_llm_client() -> LLMClient:
+    """Phase3簡易UI専用のLLMクライアントを返す"""
+
+    global _proofreading_llm_client
+    if _proofreading_llm_client is None:
+        llm_config = settings["llm"]["proofreading"]
+        try:
+            _proofreading_llm_client = create_llm_client(
+                provider=llm_config["provider"],
+                model=llm_config["model"],
+                api_key_env=llm_config.get("api_key_env", ""),
+                temperature=llm_config.get("temperature", 0.0),
+            )
+        except Exception as exc:  # pragma: no cover - runtime guard
+            raise HTTPException(status_code=500, detail=f"LLMクライアントの初期化に失敗しました: {exc}")
+
+    return _proofreading_llm_client
+
 settings = yaml.safe_load((config_dir / "settings.yaml").read_text(encoding="utf-8"))
 prompts = yaml.safe_load((config_dir / "prompts.yaml").read_text(encoding="utf-8"))
-checklist = (config_dir / "checklist.md").read_text(encoding="utf-8")
+checklist_path = Path(__file__).parent.parent / settings.get("checklist_file", "config/checklist.md")
+checklist = checklist_path.read_text(encoding="utf-8")
 
 # 正しい引数でマネージャーを初期化
 data_manager = DataManager(results_dir=results_dir)
@@ -118,46 +142,98 @@ async def read_phase3_only():
         raise HTTPException(status_code=404, detail="phase3_only.html が見つかりません")
     return FileResponse(page_path)
 
+def _normalize_excluded_items(raw_items: str) -> Dict[str, object]:
+    """入力された除外項目文字列を整形"""
 
-@app.post("/api/phase3-only/upload")
-async def upload_phase3_iteration(
+    if not raw_items:
+        return {"items": [], "formatted": "なし"}
+
+    candidates = [
+        part.strip()
+        for part in re.split(r"[\n,、]+", raw_items)
+        if part.strip()
+    ]
+    if not candidates:
+        return {"items": [], "formatted": "なし"}
+
+    formatted = "\n".join(f"- {item}" for item in candidates)
+    return {"items": candidates, "formatted": formatted}
+
+
+@app.post("/api/phase3-only/proofread")
+async def proofread_once(
     paper_id: str = Form(...),
-    iteration: int = Form(...),
     tex_file: UploadFile = File(...),
     pdf_file: UploadFile = File(...),
+    excluded_items: str = Form(""),
 ):
-    """各イテレーションのTeX/PDFをアップロード"""
+    """TeX/PDFと除外項目を受け取り、単発の校正結果を返す"""
 
-    if iteration < 1:
-        raise HTTPException(status_code=400, detail="iteration は1以上にしてください")
+    normalized_id = paper_id.strip()
+    if not normalized_id:
+        raise HTTPException(status_code=400, detail="論文IDを入力してください")
 
-    session_dir = phase3_only_dir / paper_id
-    iteration_dir = session_dir / f"iteration_{iteration:02d}"
+    tex_suffix = Path(tex_file.filename or "").suffix.lower()
+    pdf_suffix = Path(pdf_file.filename or "").suffix.lower()
+    if tex_suffix != ".tex":
+        raise HTTPException(status_code=400, detail="TeXファイル(.tex)をアップロードしてください")
+    if pdf_suffix != ".pdf":
+        raise HTTPException(status_code=400, detail="PDFファイル(.pdf)をアップロードしてください")
 
-    if iteration_dir.exists():
-        shutil.rmtree(iteration_dir)
-    iteration_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = phase3_only_dir / normalized_id / datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+    run_dir.mkdir(parents=True, exist_ok=True)
 
-    tex_filename = Path(tex_file.filename or f"iteration_{iteration}.tex").name
-    pdf_filename = Path(pdf_file.filename or f"iteration_{iteration}.pdf").name
+    tex_path = run_dir / Path(tex_file.filename or "uploaded.tex").name
+    pdf_path = run_dir / Path(pdf_file.filename or "uploaded.pdf").name
 
-    tex_path = iteration_dir / tex_filename
-    pdf_path = iteration_dir / pdf_filename
-
+    tex_bytes = await tex_file.read()
+    pdf_bytes = await pdf_file.read()
     with open(tex_path, "wb") as tex_out:
-        tex_out.write(await tex_file.read())
-
+        tex_out.write(tex_bytes)
     with open(pdf_path, "wb") as pdf_out:
-        pdf_out.write(await pdf_file.read())
+        pdf_out.write(pdf_bytes)
 
-    uploaded_at = datetime.utcnow().isoformat()
+    excluded_info = _normalize_excluded_items(excluded_items)
+    prompt = prompts["prompt_a_and_c"]["template"].format(
+        excluded_items=excluded_info["formatted"],
+        checklist=checklist,
+    )
+    (run_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+
+    llm_client = get_proofreading_llm_client()
+    try:
+        llm_response = llm_client.call(prompt=prompt, pdf_path=pdf_path)
+    except Exception as exc:  # pragma: no cover - runtime guard
+        raise HTTPException(status_code=500, detail=f"LLM呼び出しに失敗しました: {exc}")
+
+    (run_dir / "response.txt").write_text(llm_response, encoding="utf-8")
+
+    parse_result = _phase3_parser.parse_proofreading_response(llm_response)
+    issues = [issue.model_dump() for issue in parse_result.issues]
+
+    result_payload = {
+        "paper_id": normalized_id,
+        "no_issues": parse_result.no_issues,
+        "issues": issues,
+        "excluded_items": excluded_info["items"],
+        "tex_path": str(tex_path.relative_to(phase3_only_dir)),
+        "pdf_path": str(pdf_path.relative_to(phase3_only_dir)),
+        "prompt_path": str((run_dir / "prompt.txt").relative_to(phase3_only_dir)),
+        "response_path": str((run_dir / "response.txt").relative_to(phase3_only_dir)),
+    }
+
+    (run_dir / "result.json").write_text(
+        json.dumps(result_payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    message = "指摘は見つかりませんでした。" if parse_result.no_issues else f"{len(issues)}件の指摘を検出しました。"
 
     return {
         "status": "success",
-        "message": f"イテレーション{iteration}のファイルを保存しました",
-        "tex_path": str(tex_path.relative_to(phase3_only_dir)),
-        "pdf_path": str(pdf_path.relative_to(phase3_only_dir)),
-        "uploaded_at": uploaded_at,
+        "message": message,
+        **result_payload,
+
     }
 
 

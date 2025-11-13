@@ -198,9 +198,11 @@ npm run dev
 - **API ドキュメント**: http://localhost:8000/docs
 - **Health Check**: http://localhost:8000/health
 
-### フェーズ3簡易アップローダーの起動
 
-Phase3のみを運用したい場合は、FastAPIサーバーに同梱されている簡易版UIを利用できます。セッション管理や履歴表示を省いた最小構成で、各イテレーションごとにTeX/PDFを登録するだけのワークフローです。
+### 論文校正システム（フェーズ3特化UI）の起動
+
+Phase3のみを運用したい場合は、FastAPIサーバーに同梱されている「論文校正システム」UIを利用できます。セッション管理や履歴表示を省いた最小構成で、TeX/PDFと除外チェックリストを指定するとLLM校正が1回だけ実行され、その場で結果を確認できます。
+
 
 1. 依存関係をインストールしたプロジェクトルートでFastAPIサーバーを起動します。
    ```bash
@@ -209,8 +211,9 @@ Phase3のみを運用したい場合は、FastAPIサーバーに同梱されて�
    uvicorn backend.api:app --reload --host 0.0.0.0 --port 8000
    ```
 2. ブラウザで http://localhost:8000/phase3-only を開きます。
-3. 表示されるフォームに「論文ID」「イテレーション番号」「TeXファイル」「PDFファイル」を入力してアップロードします。
-4. アップロードされたファイルは `data/phase3_only/<paper_id>/iteration_XX/` に保存されるので、Phase3向けの手動フローやCLI (`src/main_phase3_only.py`) から利用してください。
+3. 表示されるフォームに「論文ID」「TeXファイル」「PDFファイル」「除外するチェックリスト項目（任意）」を入力して「校正する」を押します。
+4. LLMの校正結果（指摘一覧）がブラウザに表示され、すべての入出力は `data/phase3_only/<paper_id>/<timestamp>/` に保存されます（TeX/PDF/プロンプト/LLM応答/結果JSON）。
+
 
 ### 7. 本番環境でのデプロイ
 
