@@ -374,7 +374,7 @@ class WebSocketPhase1Adapter:
 
             # ユーザー選択を記録
             self.data_manager.record_user_action(
-                session_id=session_id,
+                session_id=phase1_id,
                 paper_id=paper_id,
                 phase="phase1",
                 iteration=iteration,
@@ -661,7 +661,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
                 # LLM呼び出しを記録
                 self.data_manager.record_llm_call(
-                    session_id=phase1_id,
+                    session_id=session_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -701,7 +701,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                 stopped_reason = "no_issues"
 
                 self.data_manager.record_iteration(
-                    session_id=phase1_id,
+                    session_id=session_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -727,7 +727,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
                 # パース失敗を記録
                 self.data_manager.record_parse_failure(
-                    session_id=phase1_id,
+                    session_id=session_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -743,7 +743,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
                 # ユーザー選択を記録
                 self.data_manager.record_user_action(
-                    session_id=phase1_id,
+                    session_id=session_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -775,7 +775,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
                 # 検出された指摘とユーザーアクションを記録
                 self.data_manager.record_detected_issue(
-                    session_id=phase1_id,
+                    session_id=session_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -789,7 +789,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
 
                 # ユーザーアクションを記録
                 self.data_manager.record_user_action(
-                    session_id=phase1_id,
+                    session_id=session_id,
                     paper_id=paper_id,
                     phase=phase,
                     iteration=iteration,
@@ -856,7 +856,7 @@ class WebSocketPhase3Adapter(WebSocketPhase1Adapter):
                     excluded_items.append(item)
 
                     self.data_manager.record_excluded_item(
-                        session_id=phase1_id,
+                        session_id=session_id,
                         paper_id=paper_id,
                         checklist_item=item,
                         reason=reason,

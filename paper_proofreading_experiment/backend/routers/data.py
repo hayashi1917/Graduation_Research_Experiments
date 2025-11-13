@@ -31,11 +31,6 @@ async def reset_data(request: ResetRequest):
                     file.unlink()
                     deleted_items.append(str(file.name))
 
-                # Reinitialize DataManager to create CSV headers
-                from ..core.dependencies import _data_manager
-                from data_manager import DataManager
-                _data_manager = DataManager(results_dir=settings.results_dir)
-
         if request.reset_versions:
             # Delete version history
             if settings.versions_dir.exists():

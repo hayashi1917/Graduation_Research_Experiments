@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/lib/store';
 import { dataAPI } from '@/lib/api';
 import { Clock, Check, AlertCircle } from 'lucide-react';
@@ -19,13 +19,7 @@ export default function Phase1Selector() {
 
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (selectedPaper) {
-      loadPhase1Sessions();
-    }
-  }, [selectedPaper]);
-
-  const loadPhase1Sessions = async () => {
+  const loadPhase1Sessions = useCallback(async () => {
     if (!selectedPaper) return;
 
     setIsLoading(true);
@@ -46,7 +40,13 @@ export default function Phase1Selector() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedPaper, setPhase1Sessions, selectedPhase1, setSelectedPhase1, addLog]);
+
+  useEffect(() => {
+    if (selectedPaper) {
+      loadPhase1Sessions();
+    }
+  }, [selectedPaper, loadPhase1Sessions]);
 
   const getStatusInfo = (status: string) => {
     switch (status) {

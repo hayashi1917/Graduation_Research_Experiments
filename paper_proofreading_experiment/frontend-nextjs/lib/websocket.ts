@@ -18,7 +18,7 @@ export class WebSocketManager {
   }
 
   private generateClientId(): string {
-    return `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `client_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   }
 
   connect(): void {
@@ -95,21 +95,10 @@ export class WebSocketManager {
   }
 
   sendAction(action: string): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      const actionUrl = `ws://localhost:8000/ws/${this.clientId}/action`;
-      const actionWs = new WebSocket(actionUrl);
-
-      actionWs.onopen = () => {
-        actionWs.send(
-          JSON.stringify({
-            action,
-          })
-        );
-        actionWs.close();
-      };
-    } else {
-      console.error('WebSocket is not connected');
-    }
+    this.sendMessage({
+      type: 'action',
+      action,
+    });
   }
 
   isConnected(): boolean {

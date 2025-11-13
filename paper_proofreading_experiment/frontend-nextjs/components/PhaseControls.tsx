@@ -52,6 +52,13 @@ export default function PhaseControls({ wsManager }: PhaseControlsProps) {
     { id: 'phase3', label: 'Phase 3 - クリーン化', color: 'purple' },
   ];
 
+  // Tailwind CSS requires complete class names (can't use template literals)
+  const phaseStyles: Record<string, string> = {
+    blue: 'bg-blue-100 border-2 border-blue-500',
+    green: 'bg-green-100 border-2 border-green-500',
+    purple: 'bg-purple-100 border-2 border-purple-500',
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-md p-6">
       <h2 className="text-xl font-bold text-gray-900 mb-4">Phase実行</h2>
@@ -64,7 +71,7 @@ export default function PhaseControls({ wsManager }: PhaseControlsProps) {
             disabled={isExecuting || !selectedPaper}
             className={`w-full flex items-center justify-between p-4 rounded-lg transition-colors ${
               currentPhase === phase.id
-                ? `bg-${phase.color}-100 border-2 border-${phase.color}-500`
+                ? phaseStyles[phase.color]
                 : `bg-gray-50 hover:bg-gray-100 border-2 border-transparent ${
                     !selectedPaper || isExecuting
                       ? 'opacity-50 cursor-not-allowed'
