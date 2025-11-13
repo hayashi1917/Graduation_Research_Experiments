@@ -954,7 +954,14 @@ class WebSocketPhase2Adapter:
             "level": "info"
         })
 
+        # TODO: Phase1セッション選択機能
+        # 将来的には、ユーザーがどのPhase1セッションを使用するか選択できるようにする
+        # phase1_sessions = self.data_manager.get_phase1_sessions(paper_id)
+        # selected_phase1 = phase1_sessions[0] if phase1_sessions else None
+
         # 最新のセッションIDを取得（Phase1で作成されたもの）
+        # Note: 現在は古いsessions.jsonベースのセッション管理を使用
+        # Phase1セッション（phase1_sessions.json）への移行が必要
         session_id = self.data_manager.get_latest_session_id(paper_id)
         if not session_id:
             # セッションが存在しない場合はエラー
