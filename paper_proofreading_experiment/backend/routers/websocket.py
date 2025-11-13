@@ -70,12 +70,18 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             if data.get("type") == "action":
                 # ユーザーの判断を受信
                 action = data.get("action")
-                logger.info(f"ユーザーアクション受信: client_id={client_id}, action={action}")
+                payload = data.get("payload")
+                logger.info(
+                    "ユーザーアクション受信: client_id=%s, action=%s, payload=%s",
+                    client_id,
+                    action,
+                    payload,
+                )
 
                 # 実行中のアダプターにアクションを通知
                 adapter = manager.get_adapter(client_id)
                 if adapter:
-                    adapter.set_user_action(action)
+                    adapter.set_user_action(action, payload)
                     logger.info(f"アダプターにアクション通知: client_id={client_id}")
                 else:
                     logger.warning(f"アダプターが見つかりません: client_id={client_id}")

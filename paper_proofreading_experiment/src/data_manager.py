@@ -275,10 +275,10 @@ class DataManager:
 
     def record_excluded_item(
         self,
-        session_id: str,
-        paper_id: str,
-        checklist_item: str,
-        reason: str,
+        session_id: str = "",
+        paper_id: str = "",
+        checklist_item: str = "",
+        reason: str = "",
         example_case: str = "",
     ):
         """除外されたチェックリスト項目を記録"""

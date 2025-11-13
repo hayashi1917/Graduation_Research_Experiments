@@ -112,12 +112,13 @@ class Phase1Cleaner:
 
             print(f"\n✓ LLMの応答を受信しました")
 
-            # 「指摘事項はありません」が含まれているか確認
-            if "指摘事項はありません" in response:
+            # 応答をパースして指摘を抽出
+            parse_result = self.parser.parse_proofreading_response(response)
+
+            if parse_result.no_issues:
                 print("✓ クリーン化完了（指摘事項なし）")
                 stopped_reason = "no_issues"
 
-                # イテレーションログを記録
                 self.data_manager.record_iteration(
                     paper_id=paper_id,
                     phase="phase1",
@@ -130,8 +131,7 @@ class Phase1Cleaner:
                 )
                 break
 
-            # 応答をパースして指摘を抽出
-            issues = self.parser.parse_proofreading_response(response)
+            issues = parse_result.issues
 
             # 指摘が1つもない場合（パース失敗の可能性）
             if not issues:
@@ -152,6 +152,7 @@ class Phase1Cleaner:
             self.parser.display_issues(issues)
 
             print("\n各指摘について判断してください:")
+            print("  [A] 承認: 正しい指摘として記録")
             print("  [M] 手動: 手動で修正")
             print("  [S] スキップ: 誤検出として該当項目を除外")
             print("  [Q] 中断: クリーン化を中断")
@@ -168,9 +169,13 @@ class Phase1Cleaner:
                 print(f"修正後: {issue.after[:100]}...")
                 print(f"{'='*60}")
 
-                action = input("\n[M]手動 / [S]スキップ / [Q]中断: ").strip().upper()
+                action = input("\n[A]承認 / [M]手動 / [S]スキップ / [Q]中断: ").strip().upper()
 
-                if action == "M":
+                if action == "A":
+                    print("→ 正しい指摘として記録します。必要に応じて後でPDFを更新してください。")
+                    detected_in_iteration.append(f"issue_{issue.issue_number}_accepted")
+
+                elif action == "M":
                     print("→ 手動で修正してください。")
                     print(f"\n修正前: {issue.before}")
                     print(f"修正後: {issue.after}")

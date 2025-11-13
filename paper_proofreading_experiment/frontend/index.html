@@ -406,6 +406,34 @@
         </div>
     </div>
 
+    <!-- スキップ詳細モーダル -->
+    <div class="modal fade" id="skipModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-white">
+                    <h5 class="modal-title">チェックリスト項目を除外</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">チェックリスト項目名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="skip-item-input" placeholder="例: 1.2 図表のフォーマット">
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label">除外理由</label>
+                        <textarea class="form-control" id="skip-reason-input" rows="3" placeholder="誤検出である理由を簡潔に記載"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <button type="button" class="btn btn-warning" id="skip-submit-btn">
+                        <i class="bi bi-check-circle"></i> 除外を記録
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- リセット確認モーダル -->
     <div class="modal fade" id="resetModal" tabindex="-1">
         <div class="modal-dialog">

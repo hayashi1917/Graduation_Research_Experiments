@@ -307,11 +307,12 @@ async def websocket_endpoint(websocket: WebSocket):
             if data.get("type") == "action":
                 # ユーザーの判断を受信
                 action = data.get("action")
+                payload = data.get("payload")
 
                 # 実行中のアダプターにアクションを通知
                 adapter = manager.get_adapter(client_id)
                 if adapter:
-                    adapter.set_user_action(action)
+                    adapter.set_user_action(action, payload)
 
                 await manager.send_message({
                     "type": "action_received",
