@@ -4,7 +4,7 @@
 """
 
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Callable, Optional
 from llm_client import LLMClient
 from data_manager import DataManager
 from response_parser import ResponseParser, ProofreadingIssue
@@ -43,7 +43,8 @@ class Phase3Proofreader:
     def run(
         self,
         paper_id: str,
-        pdf_path: Path,
+        pdf_path: Optional[Path],
+        iteration_file_getter: Optional[Callable[[int], Dict[str, Path]]] = None,
     ) -> Dict[str, Any]:
         """
         校正実験を実行
@@ -65,10 +66,29 @@ class Phase3Proofreader:
         iteration = 0
         stopped_reason = ""
         total_detected = []
+        current_pdf_path = pdf_path
+        current_tex_path: Optional[Path] = None
 
         while iteration < self.max_iterations:
             iteration += 1
             print(f"\n--- イテレーション {iteration} ---")
+
+            if iteration_file_getter:
+                file_info = iteration_file_getter(iteration)
+                new_pdf_path = file_info.get("pdf_path")
+
+                if not new_pdf_path:
+                    raise ValueError(
+                        "iteration_file_getter must return a dictionary that contains 'pdf_path'"
+                    )
+
+                current_pdf_path = new_pdf_path
+                current_tex_path = file_info.get("tex_path")
+
+            if current_pdf_path is None:
+                raise ValueError(
+                    "PDFファイルのパスが指定されていません。pdf_path引数またはiteration_file_getterで指定してください。"
+                )
 
             # 除外項目リストを文字列に変換
             excluded_items_str = "\n".join(
@@ -86,14 +106,15 @@ class Phase3Proofreader:
                 paper_id=paper_id,
                 phase="phase3",
                 iteration=iteration,
-                pdf_path=pdf_path,
+                pdf_path=current_pdf_path,
+                tex_path=current_tex_path,
             )
 
             # LLMを呼び出す
             print("LLMに校正を依頼中...")
             response = self.llm_client.call(
                 prompt=prompt,
-                pdf_path=pdf_path,
+                pdf_path=current_pdf_path,
             )
 
             # プロンプトと応答を保存

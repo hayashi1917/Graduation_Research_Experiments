@@ -15,6 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 import uvicorn
+import shutil
+from datetime import datetime
 
 # srcディレクトリをパスに追加
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -86,10 +88,12 @@ data_dir.mkdir(parents=True, exist_ok=True)
 results_dir = data_dir / "results"
 versions_dir = data_dir / "versions"
 logs_dir = data_dir / "logs"
+phase3_only_dir = data_dir / "phase3_only"
 
 results_dir.mkdir(parents=True, exist_ok=True)
 versions_dir.mkdir(parents=True, exist_ok=True)
 logs_dir.mkdir(parents=True, exist_ok=True)
+phase3_only_dir.mkdir(parents=True, exist_ok=True)
 
 settings = yaml.safe_load((config_dir / "settings.yaml").read_text(encoding="utf-8"))
 prompts = yaml.safe_load((config_dir / "prompts.yaml").read_text(encoding="utf-8"))
@@ -104,6 +108,57 @@ paper_manager = PaperManager(paper_dir=papers_dir, versions_dir=versions_dir)
 async def read_root():
     """フロントエンドのindex.htmlを返す"""
     return FileResponse(frontend_path / "index.html")
+
+
+@app.get("/phase3-only")
+async def read_phase3_only():
+    """フェーズ3簡易UIを返す"""
+    page_path = frontend_path / "phase3_only.html"
+    if not page_path.exists():
+        raise HTTPException(status_code=404, detail="phase3_only.html が見つかりません")
+    return FileResponse(page_path)
+
+
+@app.post("/api/phase3-only/upload")
+async def upload_phase3_iteration(
+    paper_id: str = Form(...),
+    iteration: int = Form(...),
+    tex_file: UploadFile = File(...),
+    pdf_file: UploadFile = File(...),
+):
+    """各イテレーションのTeX/PDFをアップロード"""
+
+    if iteration < 1:
+        raise HTTPException(status_code=400, detail="iteration は1以上にしてください")
+
+    session_dir = phase3_only_dir / paper_id
+    iteration_dir = session_dir / f"iteration_{iteration:02d}"
+
+    if iteration_dir.exists():
+        shutil.rmtree(iteration_dir)
+    iteration_dir.mkdir(parents=True, exist_ok=True)
+
+    tex_filename = Path(tex_file.filename or f"iteration_{iteration}.tex").name
+    pdf_filename = Path(pdf_file.filename or f"iteration_{iteration}.pdf").name
+
+    tex_path = iteration_dir / tex_filename
+    pdf_path = iteration_dir / pdf_filename
+
+    with open(tex_path, "wb") as tex_out:
+        tex_out.write(await tex_file.read())
+
+    with open(pdf_path, "wb") as pdf_out:
+        pdf_out.write(await pdf_file.read())
+
+    uploaded_at = datetime.utcnow().isoformat()
+
+    return {
+        "status": "success",
+        "message": f"イテレーション{iteration}のファイルを保存しました",
+        "tex_path": str(tex_path.relative_to(phase3_only_dir)),
+        "pdf_path": str(pdf_path.relative_to(phase3_only_dir)),
+        "uploaded_at": uploaded_at,
+    }
 
 
 @app.get("/api/papers")
