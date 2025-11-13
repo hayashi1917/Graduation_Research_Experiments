@@ -236,17 +236,11 @@
                         </div>
 
                         <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                            <button class="btn btn-success" id="action-auto">
-                                <i class="bi bi-check-circle"></i> [A] 自動適用
-                            </button>
-                            <button class="btn btn-primary" id="action-manual">
-                                <i class="bi bi-pencil"></i> [M] 手動修正
+                            <button class="btn btn-success" id="action-accept">
+                                <i class="bi bi-check-circle"></i> [A] 承認
                             </button>
                             <button class="btn btn-secondary" id="action-skip">
                                 <i class="bi bi-skip-forward"></i> [S] スキップ
-                            </button>
-                            <button class="btn btn-warning" id="action-difficult">
-                                <i class="bi bi-question-circle"></i> [D] 判断困難
                             </button>
                             <button class="btn btn-danger" id="action-quit">
                                 <i class="bi bi-x-circle"></i> [Q] 中断
@@ -323,11 +317,6 @@
                             <label for="pdf-file-input" class="form-label">PDFファイル</label>
                             <input type="file" class="form-control" id="pdf-file-input"
                                    accept=".pdf" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="tex-file-input" class="form-label">TeXファイル</label>
-                            <input type="file" class="form-control" id="tex-file-input"
-                                   accept=".tex" required>
                         </div>
                     </form>
                 </div>

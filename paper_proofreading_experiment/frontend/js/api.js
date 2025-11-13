@@ -22,12 +22,11 @@ const API = {
     /**
      * 論文をアップロード
      */
-    async uploadPaper(paperId, pdfFile, texFile) {
+    async uploadPaper(paperId, pdfFile) {
         try {
             const formData = new FormData();
             formData.append('paper_id', paperId);
             formData.append('pdf_file', pdfFile);
-            formData.append('tex_file', texFile);
 
             const response = await fetch(`${this.baseUrl}/api/papers/upload`, {
                 method: 'POST',
